@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Map, ScanLine, ShieldAlert, Settings } from 'lucide-react';
+import { Home, Map, ScanLine, ShieldAlert, Settings, Rss } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/navigation', label: 'Navigate', icon: Map },
   { href: '/detection', label: 'Detect', icon: ScanLine },
   { href: '/emergency', label: 'SOS', icon: ShieldAlert },
+  { href: '/connectivity', label: 'Connect', icon: Rss },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -18,7 +19,7 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 shadow-t-lg backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="grid h-16 w-full grid-cols-5 items-center justify-items-center">
+      <div className="grid h-16 w-full grid-cols-6 items-center justify-items-center">
         {navItems.map((item) => {
           const isActive = (pathname === '/' && item.href === '/') || (pathname !== '/' && item.href !== '/' && pathname.startsWith(item.href));
           return (
