@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, ArrowUp, Navigation, StopCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Navigation, StopCircle, Map } from 'lucide-react';
 
 type Instruction = {
   text: string;
