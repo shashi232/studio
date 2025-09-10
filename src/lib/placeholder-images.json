@@ -1,3 +1,17 @@
+
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "obstacle-1",
+      "description": "A sidewalk with a fire hydrant as a potential obstacle.",
+      "imageUrl": "https://picsum.photos/seed/obs1/800/600",
+      "imageHint": "street sidewalk"
+    },
+    {
+      "id": "hazard-1",
+      "description": "Uneven pavement with cracks representing a ground hazard.",
+      "imageUrl": "https://picsum.photos/seed/haz1/800/600",
+      "imageHint": "cracked pavement"
+    }
+  ]
 }
