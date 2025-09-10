@@ -4,20 +4,21 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Bluetooth, BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
+import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 
 export default function BluetoothConnection() {
   const [isScanning, setIsScanning] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [device, setDevice] = useState<BluetoothDevice | null>(null);
   const { toast } = useToast();
 
   const handleScan = async () => {
-    if (!navigator.bluetooth) {
+    if (typeof navigator === 'undefined' || !navigator.bluetooth) {
       toast({
-        title: 'Web Bluetooth API not supported',
-        description: 'Your browser does not support the Web Bluetooth API.',
+        title: 'Web Bluetooth Not Supported',
+        description: 'Your browser does not support the Web Bluetooth API. Please use a compatible browser like Chrome on Android, Mac, or Windows.',
         variant: 'destructive',
       });
       return;
@@ -26,9 +27,8 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        // Optional: Filter for specific services if you know them
-        // services: ['battery_service'] 
+        filters: [{ services: ['battery_service'] }],
+        optionalServices: ['device_information'],
       });
 
       setDevice(bleDevice);
@@ -37,11 +37,18 @@ export default function BluetoothConnection() {
         description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Bluetooth scan error:', error);
+      let description = 'Could not find any devices. Please try again.';
+      if (error.name === 'NotFoundError') {
+        description = 'No devices found. Make sure your device is nearby and in pairing mode.';
+      } else if (error.name === 'NotAllowedError') {
+        description = 'Bluetooth access was denied. Please allow permissions and try again.';
+      }
+      
       toast({
         title: 'Scan Failed',
-        description: 'Could not find any devices. Please try again.',
+        description,
         variant: 'destructive',
       });
     } finally {
@@ -51,19 +58,18 @@ export default function BluetoothConnection() {
   
   const handleConnect = async () => {
     if (!device) {
-        toast({ title: 'No device selected', variant: 'destructive'});
+        toast({ title: 'No device selected', description: 'Please scan for a device first.', variant: 'destructive'});
         return;
     }
 
-    setIsScanning(true); // Re-use for loading state
+    if (device.gatt?.connected) {
+        toast({ title: 'Already Connected'});
+        setIsConnected(true);
+        return;
+    }
+    
+    setIsConnecting(true);
     try {
-        if (device.gatt?.connected) {
-            toast({ title: 'Already Connected'});
-            setIsConnected(true);
-            setIsScanning(false);
-            return;
-        }
-
         await device.gatt?.connect();
         setIsConnected(true);
         toast({
@@ -74,27 +80,26 @@ export default function BluetoothConnection() {
         console.error('Bluetooth connect error:', error);
         toast({
             title: 'Connection Failed',
-            description: 'Could not connect to the device.',
+            description: 'Could not connect to the device. Please ensure it is in range.',
             variant: 'destructive',
         });
         setIsConnected(false);
     } finally {
-        setIsScanning(false);
+        setIsConnecting(false);
     }
   }
 
   const handleDisconnect = () => {
     if (device?.gatt?.connected) {
       device.gatt.disconnect();
-      setIsConnected(false);
-      setDevice(null);
-      toast({ title: 'Disconnected' });
+      // State change will be handled by the 'gattserverdisconnected' event listener
     }
   };
 
   useEffect(() => {
     const onDisconnected = () => {
         setIsConnected(false);
+        setDevice(null);
         toast({ title: 'Device Disconnected'});
     };
 
@@ -118,14 +123,14 @@ export default function BluetoothConnection() {
       </CardHeader>
       <CardContent className="space-y-6">
         
-        {isScanning && <Progress value={33} className="w-full" />}
+        {(isScanning || isConnecting) && <Progress value={(isScanning || isConnecting) ? 33 : 0} className="w-full" />}
         
         {device && !isConnected && (
             <Card className="bg-accent/50">
                 <CardContent className="flex items-center justify-between p-4">
                     <p className="font-semibold">Found: {device.name || 'Unnamed Device'}</p>
-                    <Button onClick={handleConnect} disabled={isScanning}>
-                        {isScanning ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <BluetoothConnected className="mr-2 h-5 w-5" />}
+                    <Button onClick={handleConnect} disabled={isConnecting}>
+                        {isConnecting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <BluetoothConnected className="mr-2 h-5 w-5" />}
                         Connect
                     </Button>
                 </CardContent>
@@ -158,7 +163,7 @@ export default function BluetoothConnection() {
         )}
 
         <div className="text-xs text-muted-foreground p-4 border rounded-lg">
-          <p><strong>Note:</strong> This feature uses the Web Bluetooth API, which is only available in some modern browsers (like Chrome) on Windows, Mac, Linux, and Android. It is not available on iOS.</p>
+          <p><strong>Note:</strong> This feature uses the Web Bluetooth API, which is only available in some modern browsers (like Chrome) on Windows, Mac, Linux, and Android. It is not available on iOS. Your device must also have Bluetooth enabled.</p>
         </div>
       </CardContent>
     </Card>
