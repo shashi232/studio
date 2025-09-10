@@ -7,6 +7,7 @@ import BottomNav from '@/components/layout/bottom-nav';
 export const metadata: Metadata = {
   title: 'SmartStep Companion',
   description: 'A companion app for your smart walking stick.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -20,6 +21,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
+        <meta name="theme-color" content="#4B0082" />
       </head>
       <body className="font-body antialiased">
         <div className="relative flex min-h-screen w-full flex-col">

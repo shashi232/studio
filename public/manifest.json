@@ -1,0 +1,21 @@
+{
+  "name": "SmartStep Companion",
+  "short_name": "SmartStep",
+  "description": "A companion app for your smart walking stick.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0F0F0",
+  "theme_color": "#4B0082",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
