@@ -7,6 +7,9 @@ import { useToast } from '@/hooks/use-toast';
 import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 
+// Standard Bluetooth Service UUID for Serial Port Profile (SPP)
+const SPP_SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb';
+
 export default function BluetoothConnection() {
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -27,8 +30,11 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [{ services: ['battery_service'] }],
-        optionalServices: ['device_information'],
+        // We accept all devices and then filter by services, which is a common
+        // pattern for connecting to devices like ESP32 that might not advertise
+        // services in a way that `filters` can pick up directly.
+        acceptAllDevices: true,
+        optionalServices: [SPP_SERVICE_UUID, 'battery_service', 'device_information'], // Add SPP and other common services
       });
 
       setDevice(bleDevice);
@@ -41,7 +47,7 @@ export default function BluetoothConnection() {
       console.error('Bluetooth scan error:', error);
       let description = 'Could not find any devices. Please try again.';
       if (error.name === 'NotFoundError') {
-        description = 'No devices found. Make sure your device is nearby and in pairing mode.';
+        description = 'No devices found. Make sure your ESP32 is nearby and in pairing mode.';
       } else if (error.name === 'NotAllowedError') {
         description = 'Bluetooth access was denied. Please allow permissions and try again.';
       }
@@ -70,7 +76,9 @@ export default function BluetoothConnection() {
     
     setIsConnecting(true);
     try {
-        await device.gatt?.connect();
+        const server = await device.gatt?.connect();
+        // You could add logic here to discover services and characteristics
+        // For now, we'll just confirm the connection.
         setIsConnected(true);
         toast({
             title: 'Connected!',
@@ -80,7 +88,7 @@ export default function BluetoothConnection() {
         console.error('Bluetooth connect error:', error);
         toast({
             title: 'Connection Failed',
-            description: 'Could not connect to the device. Please ensure it is in range.',
+            description: 'Could not connect to the device. Please ensure it is in range and advertising the correct services.',
             variant: 'destructive',
         });
         setIsConnected(false);
@@ -119,7 +127,7 @@ export default function BluetoothConnection() {
     <Card>
       <CardHeader>
         <CardTitle>Bluetooth Connection</CardTitle>
-        <CardDescription>Scan for and connect to your walking stick via Bluetooth.</CardDescription>
+        <CardDescription>Scan for and connect to your ESP32 device.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         
@@ -158,12 +166,12 @@ export default function BluetoothConnection() {
             ) : (
                 <BluetoothSearching className="mr-2 h-5 w-5" />
             )}
-            {isScanning ? 'Scanning...' : 'Scan for Bluetooth Devices'}
+            {isScanning ? 'Scanning...' : 'Scan for ESP32'}
             </Button>
         )}
 
         <div className="text-xs text-muted-foreground p-4 border rounded-lg">
-          <p><strong>Note:</strong> This feature uses the Web Bluetooth API, which is only available in some modern browsers (like Chrome) on Windows, Mac, Linux, and Android. It is not available on iOS. Your device must also have Bluetooth enabled.</p>
+          <p><strong>Note:</strong> Make sure your ESP32 has Bluetooth enabled and is discoverable. This feature uses the Web Bluetooth API, which is only available in some modern browsers (like Chrome) on Windows, Mac, Linux, and Android. It is not available on iOS.</p>
         </div>
       </CardContent>
     </Card>
