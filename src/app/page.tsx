@@ -1,26 +1,26 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowRight, Map, ScanLine, ShieldAlert } from 'lucide-react';
+import { ArrowRight, ShieldAlert, Settings, Rss } from 'lucide-react';
 
 export default function Home() {
   const features = [
-    {
-      title: 'Navigation',
-      description: 'Get haptic directions',
-      href: '/navigation',
-      icon: <Map className="h-8 w-8 text-primary" />,
-    },
-    {
-      title: 'Detection',
-      description: 'Scan for obstacles & hazards',
-      href: '/detection',
-      icon: <ScanLine className="h-8 w-8 text-primary" />,
-    },
     {
       title: 'Emergency',
       description: 'Fall detection & SOS contacts',
       href: '/emergency',
       icon: <ShieldAlert className="h-8 w-8 text-primary" />,
+    },
+    {
+      title: 'Connectivity',
+      description: 'Connect to your device',
+      href: '/connectivity',
+      icon: <Rss className="h-8 w-8 text-primary" />,
+    },
+    {
+      title: 'Settings',
+      description: 'Customize your experience',
+      href: '/settings',
+      icon: <Settings className="h-8 w-8 text-primary" />,
     },
   ];
 
