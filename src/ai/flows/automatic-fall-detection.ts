@@ -49,16 +49,15 @@ const DetectFallAndAlertOutputSchema = z.object({
   confirmationNeeded: z
     .boolean()
     .describe('Whether the user needs to confirm they are OK.'),
-  sosMessage: z.string().optional().describe('The generated SOS message content.'),
 });
 export type DetectFallAndAlertOutput = z.infer<
   typeof DetectFallAndAlertOutputSchema
 >;
 
 // Define the Twilio SMS sending tool
-const sendSms = ai.defineTool(
+const sendSmsTool = ai.defineTool(
   {
-    name: 'sendSms',
+    name: 'sendSmsTool',
     description: 'Sends an SMS message to a specified phone number.',
     inputSchema: z.object({
       to: z.string().describe('The destination phone number for the SMS in E.164 format.'),
@@ -95,39 +94,24 @@ const sendSms = ai.defineTool(
   }
 );
 
-// Define a new input schema for the prompt that includes the stringified contacts
-const PromptInputSchema = DetectFallAndAlertInputSchema.extend({
-    stringifiedEmergencyContacts: z.string().describe('A JSON string of the emergency contacts list.'),
+const FallDetectionOnlySchema = z.object({
+  fallDetected: z.boolean().describe('Whether a fall was detected or not.'),
 });
 
-// Define the main prompt for the AI
-const prompt = ai.definePrompt({
-  name: 'detectFallAndAlertPrompt',
-  input: {schema: PromptInputSchema},
-  output: {schema: DetectFallAndAlertOutputSchema},
-  tools: [sendSms],
-  prompt: `You are an AI assistant designed to detect falls and send emergency alerts.
+// Define the main prompt for the AI - SIMPLIFIED to only detect a fall
+const detectFallPrompt = ai.definePrompt({
+  name: 'detectFallPrompt',
+  input: {schema: z.object({ accelerometerData: z.string() })},
+  output: {schema: FallDetectionOnlySchema},
+  prompt: `You are an AI assistant designed to detect falls based on accelerometer data.
 
-Analyze the accelerometer data to determine if a fall has occurred. A fall is characterized by a sharp change in acceleration followed by a period of inactivity.
+Analyze the accelerometer data to determine if a fall has occurred. A fall is characterized by a sharp change in acceleration (a spike) followed by a period of inactivity.
 
-- If a fall is detected:
-  - Set 'fallDetected' to true.
-  - Set 'confirmationNeeded' to true.
-  - If 'sendSms' is true:
-    - Construct a clear and urgent SOS message. The message MUST start with "SmartStep Alert: A fall has been detected for the user." and include their location based on this GPS data: {{{gpsLocation}}}.
-    - For EACH contact in the provided list, you MUST use the 'sendSms' tool to send the generated SOS message to their phone number.
-    - Here is the list of contacts: {{{stringifiedEmergencyContacts}}}.
-    - After successfully calling the tool for all contacts, set 'alertSent' to true.
-  - If 'sendSms' is false, do not send any messages.
-
-- If no fall is detected:
-  - Set 'fallDetected' to false.
-  - Set 'confirmationNeeded' to false.
-  - Set 'alertSent' to false.
+- If a fall is detected, set 'fallDetected' to true.
+- If no fall is detected, set 'fallDetected' to false.
 
 Data provided:
 - Accelerometer: {{{accelerometerData}}}
-- GPS Location: {{{gpsLocation}}}
 
 Produce the output in the required JSON format.
 `,
@@ -141,12 +125,49 @@ const detectFallAndAlertFlow = ai.defineFlow(
     outputSchema: DetectFallAndAlertOutputSchema,
   },
   async input => {
-    // Stringify the contacts before sending to the prompt
-    const stringifiedEmergencyContacts = JSON.stringify(input.emergencyContacts);
-    const promptInput = { ...input, stringifiedEmergencyContacts };
+    // Step 1: Ask the AI to ONLY detect the fall.
+    const {output: fallDetectionResult} = await detectFallPrompt({
+      accelerometerData: input.accelerometerData,
+    });
 
-    const {output} = await prompt(promptInput);
-    return output!;
+    if (!fallDetectionResult) {
+      // If AI fails to respond, assume no fall for safety.
+      return { fallDetected: false, alertSent: false, confirmationNeeded: false };
+    }
+
+    const isFallDetected = fallDetectionResult.fallDetected;
+
+    // If no fall is detected, we are done.
+    if (!isFallDetected) {
+      return { fallDetected: false, alertSent: false, confirmationNeeded: false };
+    }
+
+    // If a fall IS detected, but we are not supposed to send an SMS yet,
+    // just report that confirmation is needed.
+    if (!input.sendSms) {
+      return { fallDetected: true, alertSent: false, confirmationNeeded: true };
+    }
+
+    // Step 2: If we are here, a fall was detected AND we need to send an SMS.
+    // The application code will now handle sending the messages.
+    let anyAlertSent = false;
+    
+    // Create the message content.
+    const sosMessage = `SmartStep Alert: A fall has been detected for the user.`;
+
+    // Loop through contacts and send SMS for each one.
+    for (const contact of input.emergencyContacts) {
+        console.log(`Attempting to send SMS to ${contact.name} at ${contact.phone}`);
+        const result = await sendSmsTool({
+            to: contact.phone,
+            body: sosMessage,
+        });
+        if (result.success) {
+            anyAlertSent = true;
+        }
+    }
+    
+    return { fallDetected: true, alertSent: anyAlertSent, confirmationNeeded: false };
   }
 );
 
