@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useContext } from 'react';
-import { detectFallAndAlert } from '@/ai/flows/automatic-fall-detection';
+import { useState, useEffect, useContext, useRef } from 'react';
+import { detectFall } from '@/ai/flows/automatic-fall-detection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -27,10 +27,45 @@ export default function FallDetection() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingAlert, setIsSendingAlert] = useState(false); // New state to prevent double sends
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
   const [contacts] = useLocalStorage<EmergencyContact[]>('sos-contacts', []);
   const { toast } = useToast();
   const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
+  const smsLinkRef = useRef<HTMLAnchorElement>(null);
+
+  const triggerNativeSms = () => {
+    if (contacts.length === 0) {
+      toast({
+        title: "No SOS Contacts",
+        description: "Cannot send alert without emergency contacts.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const phoneNumbers = contacts.map(c => c.phone).join(',');
+    const message = "SmartStep Alert: A potential fall has been detected. Please check on the user immediately.";
+    
+    // For iOS, the separator for body is '&', for Android it's '?'
+    // The safest way is to just use '?' as it works on most modern devices.
+    const smsHref = `sms:${phoneNumbers}?body=${encodeURIComponent(message)}`;
+
+    if (smsLinkRef.current) {
+        smsLinkRef.current.href = smsHref;
+        smsLinkRef.current.click();
+    }
+    
+    toast({
+        title: "Opening Messaging App",
+        description: "Please press send in your messaging app to alert contacts.",
+        variant: "default",
+    });
+
+    // Reset state after triggering SMS
+    dismissFallAlert();
+    setCountdown(COUNTDOWN_SECONDS);
+    setIsSendingAlert(false);
+  }
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -42,8 +77,8 @@ export default function FallDetection() {
     return () => clearTimeout(timer);
   }, [isFallDetected, countdown]);
 
-  const runFallDetection = async (sendSms: boolean) => {
-    if (!isMonitoring && !sendSms) {
+  const runFallDetection = async () => {
+    if (!isMonitoring) {
         toast({
             title: "Monitoring is off",
             description: "Please enable fall detection monitoring first.",
@@ -61,33 +96,20 @@ export default function FallDetection() {
     }
     
     setIsLoading(true);
-    if (sendSms) {
-      setIsSendingAlert(true);
-    }
 
     try {
       // These are mock values for demonstration. In a real app, you'd get these from device sensors.
       const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8, freefall: true });
       
-      const result = await detectFallAndAlert({
+      const result = await detectFall({
         accelerometerData: mockAccelerometerData,
-        emergencyContacts: contacts,
-        sendSms: sendSms,
       });
 
-      if (result.fallDetected && result.confirmationNeeded) {
+      if (result.fallDetected) {
         triggerFallAlert(); // This will show the "Are you OK?" dialog
         toast({ title: "Simulated Fall Detected!" });
-      } else if (result.alertSent) {
-        toast({
-          title: "SOS Alert Sent!",
-          description: "Emergency contacts have been notified via SMS.",
-          variant: "destructive",
-        });
-      } else if (!result.fallDetected) {
+      } else {
          toast({ title: "No Fall Detected", description: "The system did not detect a fall." });
-      } else if (sendSms && !result.alertSent) {
-        toast({ title: "SMS Failed", description: "The alert could not be sent. Please check your settings.", variant: "destructive" });
       }
 
     } catch (error) {
@@ -95,17 +117,11 @@ export default function FallDetection() {
         toast({ title: "Error", description: "Could not run fall detection.", variant: "destructive"});
     } finally {
         setIsLoading(false);
-        // Reset state after alert is sent or cancelled
-        if (sendSms || !isFallDetected) {
-          dismissFallAlert();
-          setCountdown(COUNTDOWN_SECONDS);
-          setIsSendingAlert(false);
-        }
     }
   }
 
   const handleSimulateFall = () => {
-    runFallDetection(false); // Don't send SMS yet, just trigger the dialog
+    runFallDetection();
   };
 
   const handleImOk = () => {
@@ -117,8 +133,8 @@ export default function FallDetection() {
 
   const handleSendAlert = () => {
     if (isSendingAlert) return; // Prevent multiple calls
-    // Now we call the flow again, but instruct it to send the SMS
-    runFallDetection(true); 
+    setIsSendingAlert(true);
+    triggerNativeSms(); 
   };
 
   return (
@@ -126,7 +142,7 @@ export default function FallDetection() {
       <Card>
         <CardHeader>
           <CardTitle>Automatic Fall Detection</CardTitle>
-          <CardDescription>Detects falls and automatically sends an SMS alert.</CardDescription>
+          <CardDescription>Detects falls and automatically prompts you to send an SMS alert.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -144,7 +160,7 @@ export default function FallDetection() {
             />
           </div>
           <Button onClick={handleSimulateFall} disabled={isLoading || !isMonitoring} className="w-full" size="lg">
-            {(isLoading && !isSendingAlert) ? (
+            {isLoading ? (
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : (
                 <Siren className="mr-2 h-5 w-5" />
@@ -170,7 +186,7 @@ export default function FallDetection() {
           <AlertDialogFooter className="flex-col gap-2">
             <Button onClick={handleSendAlert} variant="destructive" size="lg" className="w-full" disabled={isSendingAlert}>
               {isSendingAlert ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-              {isSendingAlert ? "Sending..." : "Send Alert Now"}
+              {isSendingAlert ? "Opening SMS..." : "Send Alert Now"}
             </Button>
             <Button onClick={handleImOk} variant="outline" size="lg" className="w-full" disabled={isSendingAlert}>
               I&apos;m OK
@@ -178,6 +194,9 @@ export default function FallDetection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Hidden link to trigger the SMS functionality */}
+      <a ref={smsLinkRef} style={{ display: 'none' }}></a>
     </>
   );
 }
