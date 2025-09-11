@@ -32,6 +32,21 @@ export default function FallDetection() {
   const { toast } = useToast();
   const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
   
+  useEffect(() => {
+    // Request notification permission when the component mounts
+    if (typeof window !== 'undefined' && "Notification" in window) {
+      if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  const showLocalNotification = (title: string, body: string) => {
+    if (typeof window !== 'undefined' && "Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body });
+    }
+  };
+  
   const runFallDetection = async (fallOccurred: boolean, sendSms: boolean) => {
     if (!isMonitoring && !sendSms) { // Allow sending SMS even if monitoring was off
         toast({
@@ -64,7 +79,10 @@ export default function FallDetection() {
         toast({ title: "Simulated Fall Detected!" });
       } else if (result.fallDetected && sendSms) {
         if (result.smsSent) {
-          toast({ title: "SOS Alert Sent", description: "Emergency contacts have been notified via SMS."});
+          const successTitle = "SOS Alert Sent";
+          const successDesc = "Emergency contacts have been notified via SMS.";
+          toast({ title: successTitle, description: successDesc });
+          showLocalNotification(successTitle, successDesc);
         } else {
           toast({ title: "SOS Alert Failed", description: "Could not send SMS. Check Twilio credentials and logs.", variant: "destructive"});
         }
