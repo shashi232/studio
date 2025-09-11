@@ -17,11 +17,7 @@ import type { EmergencyContact } from '@/lib/types';
 
 // Define the input schema for the flow
 const DetectFallInputSchema = z.object({
-  accelerometerData: z
-    .string()
-    .describe(
-      'Accelerometer data from the phone, as a JSON string. Includes x, y, and z axis readings.'
-    ),
+  fallOccurred: z.boolean().describe("A boolean indicating if a fall has occurred."),
   sendSms: z.boolean().describe('Whether to send an SMS alert if a fall is detected.'),
   contacts: z.array(z.object({
     id: z.string(),
@@ -45,21 +41,21 @@ export type DetectFallOutput = z.infer<
 // Define the main prompt for the AI
 const detectFallPrompt = ai.definePrompt({
   name: 'detectFallPrompt',
-  input: {schema: z.object({ accelerometerData: z.string(), contacts: DetectFallInputSchema.shape.contacts })},
+  input: {schema: z.object({ fallOccurred: z.boolean(), contacts: DetectFallInputSchema.shape.contacts })},
   output: {schema: z.object({ fallDetected: z.boolean() }) },
   tools: [sendSms],
-  prompt: `You are an AI assistant designed to detect falls based on accelerometer data and alert emergency contacts.
+  prompt: `You are an AI assistant designed to alert emergency contacts when a fall is detected.
 
-Analyze the accelerometer data to determine if a fall has occurred. A fall is characterized by a sharp change in acceleration (a spike) followed by a period of inactivity.
+You have been given a boolean 'fallOccurred' which is definitively TRUE if a fall happened.
 
-- If a fall is detected, set 'fallDetected' to true.
-- If no fall is detected, set 'fallDetected' to false.
+If 'fallOccurred' is true, you MUST use the sendSms tool to send the following alert message to EVERY emergency contact listed: "SmartStep Alert: A potential fall has been detected. Please check on the user immediately."
 
-If a fall is detected, you MUST use the sendSms tool to send the following alert message to EVERY emergency contact listed: "SmartStep Alert: A potential fall has been detected. Please check on the user immediately."
+Set the 'fallDetected' output field to true.
 
-Data provided:
-- Accelerometer: {{{accelerometerData}}}
+If 'fallOccurred' is false, do nothing and set 'fallDetected' to false.
+
 - Emergency Contacts: {{{JSON.stringify contacts}}}
+- Fall Occurred: {{{fallOccurred}}}
 
 Produce the output in the required JSON format. Then, if a fall was detected, call the necessary tools.
 `,
@@ -73,9 +69,14 @@ const detectFallAndAlertFlow = ai.defineFlow(
     outputSchema: DetectFallOutputSchema,
   },
   async (input) => {
+    // If no fall occurred or we are not supposed to send an SMS, exit early.
+    if (!input.fallOccurred || !input.sendSms) {
+        return { fallDetected: input.fallOccurred, smsSent: false };
+    }
+
     try {
       const { output } = await detectFallPrompt({
-        accelerometerData: input.accelerometerData,
+        fallOccurred: input.fallOccurred,
         contacts: input.contacts,
       });
 
@@ -83,9 +84,6 @@ const detectFallAndAlertFlow = ai.defineFlow(
         return { fallDetected: false, smsSent: false };
       }
       
-      // If a fall was detected AND we need to send an SMS, iterate and send.
-      // The AI tool calling will handle the actual sending based on the prompt.
-      // This is just to confirm the output. In a real scenario, the tool calls would be awaited.
       const smsResults = await Promise.all(
         output.toolCalls.map(async (toolCall) => {
           if (toolCall.tool === 'sendSms') {
@@ -96,7 +94,6 @@ const detectFallAndAlertFlow = ai.defineFlow(
         })
       );
 
-      // Check if at least one SMS was sent successfully
       const smsSentSuccessfully = smsResults.some(success => success);
 
       return { fallDetected: output.fallDetected, smsSent: smsSentSuccessfully };

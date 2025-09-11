@@ -32,7 +32,7 @@ export default function FallDetection() {
   const { toast } = useToast();
   const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
   
-  const runFallDetection = async (sendSms: boolean) => {
+  const runFallDetection = async (fallOccurred: boolean, sendSms: boolean) => {
     if (!isMonitoring && !sendSms) { // Allow sending SMS even if monitoring was off
         toast({
             title: "Monitoring is off",
@@ -41,7 +41,7 @@ export default function FallDetection() {
         });
         return;
     }
-    if (contacts.length === 0) {
+    if (sendSms && contacts.length === 0) {
         toast({
             title: "No SOS Contacts",
             description: "Please add at least one emergency contact in the 'SOS Contacts' tab before sending an alert.",
@@ -53,11 +53,8 @@ export default function FallDetection() {
     setIsLoading(true);
 
     try {
-      // These are mock values for demonstration. In a real app, you'd get these from device sensors.
-      const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8, freefall: true });
-      
       const result = await detectFall({
-        accelerometerData: mockAccelerometerData,
+        fallOccurred: fallOccurred,
         sendSms: sendSms,
         contacts: contacts,
       });
@@ -66,8 +63,12 @@ export default function FallDetection() {
         triggerFallAlert(); // This will show the "Are you OK?" dialog
         toast({ title: "Simulated Fall Detected!" });
       } else if (result.fallDetected && sendSms) {
-        toast({ title: "SOS Alert Sent", description: "Emergency contacts have been notified via SMS."});
-      } else {
+        if (result.smsSent) {
+          toast({ title: "SOS Alert Sent", description: "Emergency contacts have been notified via SMS."});
+        } else {
+          toast({ title: "SOS Alert Failed", description: "Could not send SMS. Check Twilio credentials and logs.", variant: "destructive"});
+        }
+      } else if (!result.fallDetected && !sendSms) {
          toast({ title: "No Fall Detected", description: "The system did not detect a fall." });
       }
 
@@ -98,7 +99,8 @@ export default function FallDetection() {
 
 
   const handleSimulateFall = () => {
-    runFallDetection(false);
+    // For simulation, we tell the backend a fall occurred (true), but not to send an SMS (false)
+    runFallDetection(true, false);
   };
 
   const handleImOk = () => {
@@ -110,7 +112,8 @@ export default function FallDetection() {
   const handleSendAlert = () => {
     if (isSendingAlert) return; // Prevent multiple calls
     setIsSendingAlert(true);
-    runFallDetection(true); 
+    // When sending the real alert, we tell the backend a fall occurred (true) AND to send the SMS (true)
+    runFallDetection(true, true); 
   };
 
   return (
