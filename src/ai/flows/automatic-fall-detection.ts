@@ -95,10 +95,15 @@ const sendSms = ai.defineTool(
   }
 );
 
+// Define a new input schema for the prompt that includes the stringified contacts
+const PromptInputSchema = DetectFallAndAlertInputSchema.extend({
+    stringifiedEmergencyContacts: z.string().describe('The stringified list of emergency contacts.'),
+});
+
 // Define the main prompt for the AI
 const prompt = ai.definePrompt({
   name: 'detectFallAndAlertPrompt',
-  input: {schema: DetectFallAndAlertInputSchema},
+  input: {schema: PromptInputSchema},
   output: {schema: DetectFallAndAlertOutputSchema},
   tools: [sendSms],
   prompt: `You are an AI assistant that helps detect falls and send alerts.
@@ -112,7 +117,7 @@ Consider a fall to be detected if there is a sudden change in acceleration follo
   - Set 'confirmationNeeded' to true. The app will then ask the user for confirmation.
   - If 'sendSms' is true:
     - Construct a clear SOS message containing the user's GPS location: {{{gpsLocation}}}.
-    - Use the 'sendSms' tool to send this message to EACH emergency contact in the list: {{{JSON.stringify emergencyContacts}}}.
+    - Use the 'sendSms' tool to send this message to EACH emergency contact in the list: {{{stringifiedEmergencyContacts}}}.
     - After using the tool, set the 'alertSent' flag to true.
   - If 'sendSms' is false, just set 'fallDetected' and 'confirmationNeeded' to true.
 
@@ -124,7 +129,7 @@ Consider a fall to be detected if there is a sudden change in acceleration follo
 Here is the data:
 Accelerometer: {{{accelerometerData}}}
 GPS Location: {{{gpsLocation}}}
-Emergency Contacts: {{{JSON.stringify emergencyContacts}}}
+Emergency Contacts: {{{stringifiedEmergencyContacts}}}
 
 Output in the required JSON format.
 `,
@@ -138,7 +143,11 @@ const detectFallAndAlertFlow = ai.defineFlow(
     outputSchema: DetectFallAndAlertOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
+    // Stringify the contacts before sending to the prompt
+    const stringifiedEmergencyContacts = JSON.stringify(input.emergencyContacts);
+    const promptInput = { ...input, stringifiedEmergencyContacts };
+
+    const {output} = await prompt(promptInput);
     return output!;
   }
 );
