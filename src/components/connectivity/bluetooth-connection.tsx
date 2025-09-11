@@ -9,10 +9,9 @@ import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 import { AppContext } from '@/context/app-context';
 
-// Standard Bluetooth Service UUID for Serial Port Profile (SPP)
-const SPP_SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb';
-// Standard Characteristic for SPP for receiving data (RX) from the ESP32
-const SPP_CHARACTERISTIC_UUID = '00001101-0000-1000-8000-00805f9b34fb'; // Often same as service
+// Custom UUIDs from the DRISHTI_Stick ESP32 Code
+const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
 
 export default function BluetoothConnection() {
@@ -45,8 +44,8 @@ export default function BluetoothConnection() {
   
   const setupNotifications = async (server: BluetoothRemoteGATTServer) => {
     try {
-        const service = await server.getPrimaryService(SPP_SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(SPP_CHARACTERISTIC_UUID);
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
         await characteristic.startNotifications();
         characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
@@ -79,8 +78,7 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true, // Show all devices
-        optionalServices: [SPP_SERVICE_UUID], // We will try to connect to this service later
+        filters: [{ services: [SERVICE_UUID] }],
       });
 
       setDevice(bleDevice);
@@ -93,7 +91,7 @@ export default function BluetoothConnection() {
       console.error('Bluetooth scan error:', error);
       
       // Don't show an error toast if the user simply cancelled the device chooser.
-      if (error.name === 'NotFoundError' && error.message.includes('cancelled')) {
+      if (error.name === 'NotFoundError' && (error.message.includes('cancelled') || error.message.includes('No device selected'))) {
         // User cancelled the device picker. Silently stop.
       } else {
         let description = 'Could not find any devices. Please try again.';
@@ -214,7 +212,7 @@ export default function BluetoothConnection() {
             </Card>
         )}
 
-        {!device && (
+        {!device && !isConnected && (
             <Button onClick={handleScan} disabled={isScanning} className="w-full" size="lg">
             {isScanning ? (
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
