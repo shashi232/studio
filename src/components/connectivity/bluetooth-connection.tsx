@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 import { AppContext } from '@/context/app-context';
+import { Switch } from '../ui/switch';
+import { Label } from '../ui/label';
 
 
 export default function BluetoothConnection() {
@@ -15,6 +17,9 @@ export default function BluetoothConnection() {
     isConnecting,
     isConnected,
     device,
+    lastDevice,
+    autoConnect,
+    setAutoConnect,
     handleScan,
     handleConnect,
     handleDisconnect,
@@ -28,7 +33,23 @@ export default function BluetoothConnection() {
       </CardHeader>
       <CardContent className="space-y-6">
         
-        {(isScanning || isConnecting) && <Progress value={(isScanning || isConnecting) ? 33 : 0} className="w-full" />}
+        <div className="flex items-center justify-between rounded-lg border p-4">
+            <Label htmlFor="autoconnect-switch" className="flex-grow">
+              <h3 className="font-medium">Auto-connect</h3>
+              <p className="text-xs text-muted-foreground">
+                {lastDevice ? `Automatically connect to ${lastDevice.name}` : 'No previous device saved.'}
+              </p>
+            </Label>
+            <Switch
+              id="autoconnect-switch"
+              checked={autoConnect}
+              onCheckedChange={setAutoConnect}
+              disabled={!lastDevice}
+              aria-label="Toggle autoconnect"
+            />
+          </div>
+        
+        {(isScanning || isConnecting) && <Progress value={isScanning ? 33 : isConnecting ? 66 : 0} className="w-full" />}
         
         {device && !isConnected && (
             <Card className="bg-accent/50">

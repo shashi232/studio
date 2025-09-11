@@ -1,11 +1,18 @@
+
 "use client";
 
 import React, { createContext, useState, useCallback, ReactNode, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import useLocalStorage from '@/lib/hooks/use-local-storage';
 
 // Custom UUIDs from the DRISHTI_Stick ESP32 Code
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+type StoredDevice = {
+    id: string;
+    name: string | null;
+}
 
 interface AppContextType {
   isFallDetected: boolean;
@@ -17,6 +24,9 @@ interface AppContextType {
   isConnecting: boolean;
   isConnected: boolean;
   device: BluetoothDevice | null;
+  lastDevice: StoredDevice | null;
+  autoConnect: boolean;
+  setAutoConnect: (value: boolean) => void;
 
   // Bluetooth Actions
   handleScan: () => Promise<void>;
@@ -32,6 +42,9 @@ export const AppContext = createContext<AppContextType>({
   isConnecting: false,
   isConnected: false,
   device: null,
+  lastDevice: null,
+  autoConnect: false,
+  setAutoConnect: () => {},
   handleScan: async () => {},
   handleConnect: async () => {},
   handleDisconnect: () => {},
@@ -39,6 +52,7 @@ export const AppContext = createContext<AppContextType>({
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isFallDetected, setIsFallDetected] = useState(false);
+  const { toast } = useToast();
 
   const triggerFallAlert = useCallback(() => {
     setIsFallDetected(true);
@@ -53,7 +67,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [device, setDevice] = useState<BluetoothDevice | null>(null);
-  const { toast } = useToast();
+  
+  const [lastDevice, setLastDevice] = useLocalStorage<StoredDevice | null>('last-bt-device', null);
+  const [autoConnect, setAutoConnect] = useLocalStorage('bt-autoconnect', false);
 
   const handleNotifications = useCallback((event: Event) => {
     const target = event.target as BluetoothRemoteGATTCharacteristic;
@@ -96,7 +112,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  const handleScan = async () => {
+  const handleScan = async (autoConnecting: boolean = false) => {
     if (typeof navigator === 'undefined' || !navigator.bluetooth) {
       toast({
         title: 'Web Bluetooth Not Supported',
@@ -107,23 +123,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setIsScanning(true);
+    if (autoConnecting) {
+        toast({ title: 'Auto-connecting...', description: `Scanning for ${lastDevice?.name}`});
+    }
+    
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
+        acceptAllDevices: !autoConnecting,
+        filters: autoConnecting && lastDevice ? [{ name: lastDevice.name as string}] : undefined,
         optionalServices: [SERVICE_UUID],
       });
 
       setDevice(bleDevice);
-      toast({
-        title: 'Device Found!',
-        description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
-      });
+      if (!autoConnecting) {
+        toast({
+            title: 'Device Found!',
+            description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
+        });
+      }
 
     } catch (error: any) {
       if (error.name !== 'NotFoundError') {
+        const description = autoConnecting
+          ? 'Could not find the last connected device. It may be out of range or off.'
+          : 'Could not find any devices. Please try again.';
         toast({
           title: 'Scan Failed',
-          description: 'Could not find any devices. Please try again.',
+          description,
           variant: 'destructive',
         });
       }
@@ -153,6 +179,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 title: 'Connected!',
                 description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
             });
+            setLastDevice({ id: device.id, name: device.name || null });
             await setupNotifications(server);
         } else {
             throw new Error("Could not get GATT server.");
@@ -193,7 +220,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     };
   }, [device, toast]);
+  
+  // Effect for auto-connecting
+  useEffect(() => {
+    const autoConnectOnLoad = async () => {
+        if (autoConnect && lastDevice && !isConnected && !device) {
+            await handleScan(true);
+        }
+    }
+    autoConnectOnLoad();
+  }, [autoConnect, lastDevice]);
 
+  // Effect to connect automatically after auto-scan finds a device
+  useEffect(() => {
+    if(device && isScanning === false && isConnected === false && isConnecting === false && autoConnect && lastDevice?.name === device.name) {
+        handleConnect();
+    }
+  }, [device, isScanning, autoConnect, lastDevice]);
 
   const contextValue = useMemo(() => ({
     isFallDetected,
@@ -203,10 +246,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     isConnecting,
     isConnected,
     device,
+    lastDevice,
+    autoConnect,
+    setAutoConnect,
     handleScan,
     handleConnect,
     handleDisconnect,
-  }), [isFallDetected, triggerFallAlert, dismissFallAlert, isScanning, isConnecting, isConnected, device, handleScan, handleConnect, handleDisconnect]);
+  }), [isFallDetected, triggerFallAlert, dismissFallAlert, isScanning, isConnecting, isConnected, device, lastDevice, autoConnect, setAutoConnect, handleScan, handleConnect, handleDisconnect]);
 
 
   return (
