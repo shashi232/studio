@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -25,11 +26,6 @@ const DetectFallAndAlertInputSchema = z.object({
     .string()
     .describe(
       'Accelerometer data from the phone, as a JSON string. Includes x, y, and z axis readings.'
-    ),
-  gpsLocation: z
-    .string()
-    .describe(
-      'The GPS location of the phone, as a JSON string with latitude and longitude fields.'
     ),
   emergencyContacts: z
     .array(EmergencyContactSchema)
@@ -125,10 +121,20 @@ const detectFallAndAlertFlow = ai.defineFlow(
     outputSchema: DetectFallAndAlertOutputSchema,
   },
   async input => {
-    // Step 1: Ask the AI to ONLY detect the fall.
-    const {output: fallDetectionResult} = await detectFallPrompt({
-      accelerometerData: input.accelerometerData,
-    });
+    let fallDetectionResult;
+    try {
+      // Step 1: Ask the AI to ONLY detect the fall.
+      const {output} = await detectFallPrompt({
+        accelerometerData: input.accelerometerData,
+      });
+      fallDetectionResult = output;
+
+    } catch (error) {
+        console.error("AI Fall Detection Error:", error);
+        // If the AI service fails, we assume no fall for safety.
+        return { fallDetected: false, alertSent: false, confirmationNeeded: false };
+    }
+
 
     if (!fallDetectionResult) {
       // If AI fails to respond, assume no fall for safety.
