@@ -1,17 +1,40 @@
 "use client";
 
-import React, { createContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useCallback, ReactNode, useEffect, useMemo } from 'react';
+import { useToast } from '@/hooks/use-toast';
+
+// Custom UUIDs from the DRISHTI_Stick ESP32 Code
+const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
 interface AppContextType {
   isFallDetected: boolean;
   triggerFallAlert: () => void;
   dismissFallAlert: () => void;
+  
+  // Bluetooth State
+  isScanning: boolean;
+  isConnecting: boolean;
+  isConnected: boolean;
+  device: BluetoothDevice | null;
+
+  // Bluetooth Actions
+  handleScan: () => Promise<void>;
+  handleConnect: () => Promise<void>;
+  handleDisconnect: () => void;
 }
 
 export const AppContext = createContext<AppContextType>({
   isFallDetected: false,
   triggerFallAlert: () => {},
   dismissFallAlert: () => {},
+  isScanning: false,
+  isConnecting: false,
+  isConnected: false,
+  device: null,
+  handleScan: async () => {},
+  handleConnect: async () => {},
+  handleDisconnect: () => {},
 });
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -25,8 +48,169 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setIsFallDetected(false);
   }, []);
 
+  // --- Bluetooth State and Logic ---
+  const [isScanning, setIsScanning] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [device, setDevice] = useState<BluetoothDevice | null>(null);
+  const { toast } = useToast();
+
+  const handleNotifications = useCallback((event: Event) => {
+    const target = event.target as BluetoothRemoteGATTCharacteristic;
+    const value = target.value;
+    if (value) {
+      const decoder = new TextDecoder('utf-8');
+      const message = decoder.decode(value);
+      console.log('Received from ESP32:', message);
+      
+      if (message.includes('FALL')) {
+        toast({
+          title: 'Fall Detected by Device!',
+          description: 'SmartStep device triggered a fall alert.',
+          variant: 'destructive',
+        });
+        triggerFallAlert();
+      }
+    }
+  }, [toast, triggerFallAlert]);
+  
+  const setupNotifications = async (server: BluetoothRemoteGATTServer) => {
+    try {
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+        
+        toast({
+            title: 'Notifications Enabled',
+            description: 'Listening for messages from your SmartStep device.',
+        });
+    } catch(error) {
+        console.error('Notification setup error:', error);
+        toast({
+            title: 'Listener Failed',
+            description: 'Could not set up a listener for device messages.',
+            variant: 'destructive',
+        });
+    }
+  }
+
+  const handleScan = async () => {
+    if (typeof navigator === 'undefined' || !navigator.bluetooth) {
+      toast({
+        title: 'Web Bluetooth Not Supported',
+        description: 'Your browser does not support the Web Bluetooth API.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    try {
+      const bleDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID],
+      });
+
+      setDevice(bleDevice);
+      toast({
+        title: 'Device Found!',
+        description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
+      });
+
+    } catch (error: any) {
+      if (error.name !== 'NotFoundError') {
+        toast({
+          title: 'Scan Failed',
+          description: 'Could not find any devices. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  };
+  
+  const handleConnect = async () => {
+    if (!device) {
+        toast({ title: 'No device selected', description: 'Please scan for a device first.', variant: 'destructive'});
+        return;
+    }
+
+    if (device.gatt?.connected) {
+        toast({ title: 'Already Connected'});
+        setIsConnected(true);
+        return;
+    }
+    
+    setIsConnecting(true);
+    try {
+        const server = await device.gatt?.connect();
+        if (server) {
+            setIsConnected(true);
+            toast({
+                title: 'Connected!',
+                description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
+            });
+            await setupNotifications(server);
+        } else {
+            throw new Error("Could not get GATT server.");
+        }
+    } catch(error) {
+        console.error('Bluetooth connect error:', error);
+        toast({
+            title: 'Connection Failed',
+            description: 'Could not connect to the device.',
+            variant: 'destructive',
+        });
+        setIsConnected(false);
+    } finally {
+        setIsConnecting(false);
+    }
+  }
+
+  const handleDisconnect = () => {
+    if (device?.gatt?.connected) {
+      device.gatt.disconnect();
+    }
+  };
+
+  useEffect(() => {
+    const onDisconnected = () => {
+        setIsConnected(false);
+        setDevice(null);
+        toast({ title: 'Device Disconnected'});
+    };
+
+    if (device) {
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+    }
+
+    return () => {
+        if (device) {
+            device.removeEventListener('gattserverdisconnected', onDisconnected);
+        }
+    };
+  }, [device, toast]);
+
+
+  const contextValue = useMemo(() => ({
+    isFallDetected,
+    triggerFallAlert,
+    dismissFallAlert,
+    isScanning,
+    isConnecting,
+    isConnected,
+    device,
+    handleScan,
+    handleConnect,
+    handleDisconnect,
+  }), [isFallDetected, triggerFallAlert, dismissFallAlert, isScanning, isConnecting, isConnected, device, handleScan, handleConnect, handleDisconnect]);
+
+
   return (
-    <AppContext.Provider value={{ isFallDetected, triggerFallAlert, dismissFallAlert }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

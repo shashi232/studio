@@ -1,181 +1,24 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useContext } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
 import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 import { AppContext } from '@/context/app-context';
 
-// Custom UUIDs from the DRISHTI_Stick ESP32 Code
-const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-
 
 export default function BluetoothConnection() {
-  const [isScanning, setIsScanning] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [device, setDevice] = useState<BluetoothDevice | null>(null);
-  const { toast } = useToast();
-  const { triggerFallAlert } = useContext(AppContext);
-
-  const handleNotifications = useCallback((event: Event) => {
-    const target = event.target as BluetoothRemoteGATTCharacteristic;
-    const value = target.value;
-    if (value) {
-      const decoder = new TextDecoder('utf-8');
-      const message = decoder.decode(value);
-      console.log('Received from ESP32:', message);
-      
-      // Check for a specific message from the ESP32 to trigger the alert
-      if (message.includes('FALL')) {
-        toast({
-          title: 'Fall Detected by Device!',
-          description: 'SmartStep device triggered a fall alert.',
-          variant: 'destructive',
-        });
-        triggerFallAlert();
-      }
-    }
-  }, [toast, triggerFallAlert]);
-  
-  const setupNotifications = async (server: BluetoothRemoteGATTServer) => {
-    try {
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-
-        await characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
-        
-        toast({
-            title: 'Notifications Enabled',
-            description: 'Listening for messages from your SmartStep device.',
-        });
-    } catch(error) {
-        console.error('Notification setup error:', error);
-        toast({
-            title: 'Listener Failed',
-            description: 'Could not set up a listener for device messages.',
-            variant: 'destructive',
-        });
-    }
-  }
-
-
-  const handleScan = async () => {
-    if (typeof navigator === 'undefined' || !navigator.bluetooth) {
-      toast({
-        title: 'Web Bluetooth Not Supported',
-        description: 'Your browser does not support the Web Bluetooth API. Please use a compatible browser like Chrome on Android, Mac, or Windows.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsScanning(true);
-    try {
-      const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID],
-      });
-
-      setDevice(bleDevice);
-      toast({
-        title: 'Device Found!',
-        description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
-      });
-
-    } catch (error: any) {
-      console.error('Bluetooth scan error:', error);
-      
-      // Don't show an error toast if the user simply cancelled the device chooser.
-      if (error.name === 'NotFoundError' && (error.message.includes('cancelled') || error.message.includes('No device selected'))) {
-        // User cancelled the device picker. Silently stop.
-      } else {
-        let description = 'Could not find any devices. Please try again.';
-        if (error.name === 'NotFoundError') {
-          description = 'No devices found. Make sure your SmartStep device is nearby, turned on, and in pairing mode.';
-        } else if (error.name === 'NotAllowedError') {
-          description = 'Bluetooth access was denied. Please allow permissions and try again.';
-        }
-        
-        toast({
-          title: 'Scan Failed',
-          description,
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      setIsScanning(false);
-    }
-  };
-  
-  const handleConnect = async () => {
-    if (!device) {
-        toast({ title: 'No device selected', description: 'Please scan for a device first.', variant: 'destructive'});
-        return;
-    }
-
-    if (device.gatt?.connected) {
-        toast({ title: 'Already Connected'});
-        setIsConnected(true);
-        return;
-    }
-    
-    setIsConnecting(true);
-    try {
-        const server = await device.gatt?.connect();
-        if (server) {
-            setIsConnected(true);
-            toast({
-                title: 'Connected!',
-                description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
-            });
-            await setupNotifications(server);
-        } else {
-            throw new Error("Could not get GATT server.");
-        }
-    } catch(error) {
-        console.error('Bluetooth connect error:', error);
-        toast({
-            title: 'Connection Failed',
-            description: 'Could not connect to the device. Please ensure it is in range and advertising the correct services.',
-            variant: 'destructive',
-        });
-        setIsConnected(false);
-    } finally {
-        setIsConnecting(false);
-    }
-  }
-
-  const handleDisconnect = () => {
-    if (device?.gatt?.connected) {
-      device.gatt.disconnect();
-    }
-  };
-
-  useEffect(() => {
-    const onDisconnected = () => {
-        setIsConnected(false);
-        setDevice(null);
-        toast({ title: 'Device Disconnected'});
-    };
-
-    if (device) {
-        device.addEventListener('gattserverdisconnected', onDisconnected);
-    }
-
-    return () => {
-        if (device) {
-            // Clean up characteristic listener if it exists
-            device.removeEventListener('gattserverdisconnected', onDisconnected);
-        }
-    };
-  }, [device, toast]);
-
+  const { 
+    isScanning,
+    isConnecting,
+    isConnected,
+    device,
+    handleScan,
+    handleConnect,
+    handleDisconnect,
+  } = useContext(AppContext);
 
   return (
     <Card>
