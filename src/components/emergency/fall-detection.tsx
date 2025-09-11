@@ -68,16 +68,14 @@ export default function FallDetection() {
     try {
       // These are mock values for demonstration. In a real app, you'd get these from device sensors.
       const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8, freefall: true });
-      const mockGpsLocation = JSON.stringify({ latitude: 34.0522, longitude: -118.2437 });
       
       const result = await detectFallAndAlert({
         accelerometerData: mockAccelerometerData,
-        gpsLocation: mockGpsLocation,
         emergencyContacts: contacts,
         sendSms: sendSms,
       });
 
-      if (result.fallDetected && !sendSms) {
+      if (result.fallDetected && result.confirmationNeeded) {
         triggerFallAlert(); // This will show the "Are you OK?" dialog
         toast({ title: "Simulated Fall Detected!" });
       } else if (result.alertSent) {
