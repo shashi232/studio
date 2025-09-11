@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview A flow for detecting falls using the phone's sensors and triggering an alert.
+ * @fileOverview A flow for detecting falls, optionally using Twilio to send SMS alerts.
  *
  * - detectFallAndAlert - A function that handles the fall detection and alerting process.
  * - DetectFallAndAlertInput - The input type for the detectFallAndAlert function.
@@ -10,12 +10,21 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import twilio from 'twilio';
 
+// Define the schema for a single emergency contact
+const EmergencyContactSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string(),
+});
+
+// Define the input schema for the flow
 const DetectFallAndAlertInputSchema = z.object({
   accelerometerData: z
     .string()
     .describe(
-      'Accelerometer data from the phone, as a JSON string.  Includes x, y, and z axis readings.'
+      'Accelerometer data from the phone, as a JSON string. Includes x, y, and z axis readings.'
     ),
   gpsLocation: z
     .string()
@@ -23,58 +32,105 @@ const DetectFallAndAlertInputSchema = z.object({
       'The GPS location of the phone, as a JSON string with latitude and longitude fields.'
     ),
   emergencyContacts: z
-    .string()
-    .describe(
-      'A list of emergency contacts, as a JSON string, with name and phone number for each contact.'
-    ),
+    .array(EmergencyContactSchema)
+    .describe('A list of emergency contacts.'),
+  sendSms: z.boolean().describe('Whether to send an SMS to emergency contacts.'),
 });
-export type DetectFallAndAlertInput = z.infer<typeof DetectFallAndAlertInputSchema>;
+export type DetectFallAndAlertInput = z.infer<
+  typeof DetectFallAndAlertInputSchema
+>;
 
+// Define the output schema for the flow
 const DetectFallAndAlertOutputSchema = z.object({
   fallDetected: z.boolean().describe('Whether a fall was detected or not.'),
-  alertSent: z.boolean().describe('Whether an alert was sent to emergency contacts.'),
-  locationSent: z.boolean().describe('Whether the GPS location was sent.'),
+  alertSent: z
+    .boolean()
+    .describe('Whether an alert was sent to emergency contacts.'),
   confirmationNeeded: z
     .boolean()
     .describe('Whether the user needs to confirm they are OK.'),
-  sosMessage: z.string().describe('SOS message content.'),
+  sosMessage: z.string().optional().describe('The generated SOS message content.'),
 });
-export type DetectFallAndAlertOutput = z.infer<typeof DetectFallAndAlertOutputSchema>;
+export type DetectFallAndAlertOutput = z.infer<
+  typeof DetectFallAndAlertOutputSchema
+>;
 
-export async function detectFallAndAlert(
-  input: DetectFallAndAlertInput
-): Promise<DetectFallAndAlertOutput> {
-  return detectFallAndAlertFlow(input);
-}
+// Define the Twilio SMS sending tool
+const sendSms = ai.defineTool(
+  {
+    name: 'sendSms',
+    description: 'Sends an SMS message to a specified phone number.',
+    inputSchema: z.object({
+      to: z.string().describe('The destination phone number for the SMS.'),
+      body: z.string().describe('The content of the SMS message.'),
+    }),
+    outputSchema: z.object({
+      success: z.boolean(),
+      messageSid: z.string().optional(),
+    }),
+  },
+  async input => {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
 
+    if (!accountSid || !authToken || !twilioPhoneNumber) {
+      console.error('Twilio credentials are not set in environment variables.');
+      return {success: false};
+    }
+
+    try {
+      const client = twilio(accountSid, authToken);
+      const message = await client.messages.create({
+        body: input.body,
+        from: twilioPhoneNumber,
+        to: input.to,
+      });
+      console.log(`SMS sent to ${input.to} with SID: ${message.sid}`);
+      return {success: true, messageSid: message.sid};
+    } catch (error) {
+      console.error(`Failed to send SMS to ${input.to}:`, error);
+      return {success: false};
+    }
+  }
+);
+
+// Define the main prompt for the AI
 const prompt = ai.definePrompt({
   name: 'detectFallAndAlertPrompt',
   input: {schema: DetectFallAndAlertInputSchema},
   output: {schema: DetectFallAndAlertOutputSchema},
+  tools: [sendSms],
   prompt: `You are an AI assistant that helps detect falls and send alerts.
 
 You will receive accelerometer data, GPS location, and a list of emergency contacts.
 Your task is to analyze the accelerometer data to determine if a fall has occurred.
-If a fall is detected, you should:
-1. Set fallDetected to true.
-2. Determine if user confirmation is needed.
-3. Construct an SOS message containing the user's location.
-4. Set the alertSent flag to indicate that an alert should be sent if the user does not respond.
-5. Set locationSent flag to true if you include the location in the alert.
-
-Here is the accelerometer data: {{{accelerometerData}}}
-Here is the GPS location: {{{gpsLocation}}}
-Here are the emergency contacts: {{{emergencyContacts}}}
-
 Consider a fall to be detected if there is a sudden change in acceleration followed by a period of no movement.
-If a fall is detected, set confirmationNeeded to true. The app should display a message asking the user if they are OK.
-If the user does not respond within a specified time, the app should send an SOS message to the emergency contacts with the user's location.
-Set alertSent to true to indicate that an alert should be sent if there is no response from user.
 
-Output in JSON format.
+- If a fall is detected:
+  - Set 'fallDetected' to true.
+  - Set 'confirmationNeeded' to true. The app will then ask the user for confirmation.
+  - If 'sendSms' is true:
+    - Construct a clear SOS message containing the user's GPS location: {{{gpsLocation}}}.
+    - Use the 'sendSms' tool to send this message to EACH emergency contact in the list: {{{JSON.stringify emergencyContacts}}}.
+    - After using the tool, set the 'alertSent' flag to true.
+  - If 'sendSms' is false, just set 'fallDetected' and 'confirmationNeeded' to true.
+
+- If no fall is detected:
+  - Set 'fallDetected' to false.
+  - Set 'confirmationNeeded' to false.
+  - Set 'alertSent' to false.
+
+Here is the data:
+Accelerometer: {{{accelerometerData}}}
+GPS Location: {{{gpsLocation}}}
+Emergency Contacts: {{{JSON.stringify emergencyContacts}}}
+
+Output in the required JSON format.
 `,
 });
 
+// Define the flow that orchestrates the process
 const detectFallAndAlertFlow = ai.defineFlow(
   {
     name: 'detectFallAndAlertFlow',
@@ -86,3 +142,10 @@ const detectFallAndAlertFlow = ai.defineFlow(
     return output!;
   }
 );
+
+// Exported function to be called from the frontend
+export async function detectFallAndAlert(
+  input: DetectFallAndAlertInput
+): Promise<DetectFallAndAlertOutput> {
+  return detectFallAndAlertFlow(input);
+}

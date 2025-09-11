@@ -17,7 +17,7 @@ import { Plus, User, Trash2, Edit, X } from 'lucide-react';
 
 const contactSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, { message: "Invalid phone number format." }),
+  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, { message: "Invalid phone number format. Use E.164 format, e.g., +1234567890" }),
 });
 
 export default function SosContacts() {

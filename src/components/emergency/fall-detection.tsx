@@ -28,7 +28,7 @@ export default function FallDetection() {
   const [isLoading, setIsLoading] = useState(false);
   const [contacts] = useLocalStorage<EmergencyContact[]>('sos-contacts', []);
   const { toast } = useToast();
-  const { isFallDetected, dismissFallAlert } = useContext(AppContext);
+  const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -36,14 +36,12 @@ export default function FallDetection() {
       timer = setTimeout(() => setCountdown(c => c - 1), 1000);
     } else if (isFallDetected && countdown === 0) {
       handleSendAlert();
-      dismissFallAlert();
-      setCountdown(COUNTDOWN_SECONDS);
     }
     return () => clearTimeout(timer);
-  }, [isFallDetected, countdown, dismissFallAlert]);
+  }, [isFallDetected, countdown]);
 
-  const handleSimulateFall = async () => {
-    if (!isMonitoring) {
+  const runFallDetection = async (sendSms: boolean) => {
+    if (!isMonitoring && !sendSms) {
         toast({
             title: "Monitoring is off",
             description: "Please enable fall detection monitoring first.",
@@ -51,34 +49,56 @@ export default function FallDetection() {
         });
         return;
     }
-
+    if (contacts.length === 0) {
+        toast({
+            title: "No SOS Contacts",
+            description: "Please add at least one emergency contact in the 'SOS Contacts' tab.",
+            variant: "destructive"
+        });
+        return;
+    }
+    
     setIsLoading(true);
     try {
-      const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8 });
+      // These are mock values for demonstration. In a real app, you'd get these from device sensors.
+      const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8, freefall: true });
       const mockGpsLocation = JSON.stringify({ latitude: 34.0522, longitude: -118.2437 });
       
       const result = await detectFallAndAlert({
         accelerometerData: mockAccelerometerData,
         gpsLocation: mockGpsLocation,
-        emergencyContacts: JSON.stringify(contacts),
+        emergencyContacts: contacts,
+        sendSms: sendSms,
       });
 
-      if (result.fallDetected) {
-        setCountdown(COUNTDOWN_SECONDS);
-        // This now uses the global state trigger
-        // The component will react via the AppContext
+      if (result.fallDetected && !sendSms) {
+        triggerFallAlert(); // This will show the "Are you OK?" dialog
         toast({ title: "Simulated Fall Detected!" });
-        // The AppContext trigger is implicitly called by the logic now
-        // so we just need to handle the UI part
-      } else {
+      } else if (result.alertSent) {
+        toast({
+          title: "SOS Alert Sent!",
+          description: "Emergency contacts have been notified via SMS.",
+          variant: "destructive",
+        });
+      } else if (!result.fallDetected) {
          toast({ title: "No Fall Detected", description: "The system did not detect a fall." });
       }
+
     } catch (error) {
         console.error("Fall detection error:", error);
         toast({ title: "Error", description: "Could not run fall detection.", variant: "destructive"});
     } finally {
         setIsLoading(false);
+        // Reset state after alert is sent or cancelled
+        if (sendSms) {
+          dismissFallAlert();
+          setCountdown(COUNTDOWN_SECONDS);
+        }
     }
+  }
+
+  const handleSimulateFall = () => {
+    runFallDetection(false); // Don't send SMS yet, just trigger the dialog
   };
 
   const handleImOk = () => {
@@ -88,11 +108,8 @@ export default function FallDetection() {
   };
 
   const handleSendAlert = () => {
-    toast({
-      title: "SOS Alert Sent!",
-      description: "Emergency contacts have been notified with your location.",
-      variant: "destructive",
-    });
+    // Now we call the flow again, but instruct it to send the SMS
+    runFallDetection(true); 
   };
 
   return (
@@ -100,7 +117,7 @@ export default function FallDetection() {
       <Card>
         <CardHeader>
           <CardTitle>Automatic Fall Detection</CardTitle>
-          <CardDescription>Detects falls and automatically sends an SOS.</CardDescription>
+          <CardDescription>Detects falls and automatically sends an SMS alert.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -118,7 +135,7 @@ export default function FallDetection() {
             />
           </div>
           <Button onClick={handleSimulateFall} disabled={isLoading || !isMonitoring} className="w-full" size="lg">
-            {isLoading ? (
+            {isLoading && countdown > 0 ? (
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : (
                 <Siren className="mr-2 h-5 w-5" />
@@ -135,14 +152,17 @@ export default function FallDetection() {
               Fall Detected!
             </AlertDialogTitle>
             <AlertDialogDescription className="text-center">
-              Are you okay? An alert will be sent to your emergency contacts in...
+              Are you okay? An SMS alert will be sent to your emergency contacts in...
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex items-center justify-center py-4">
             <div className="text-6xl font-bold tabular-nums text-destructive">{countdown}</div>
           </div>
-          <AlertDialogFooter>
-            <Button onClick={handleImOk} size="lg" className="w-full">
+          <AlertDialogFooter className="flex-col gap-2">
+            <Button onClick={handleSendAlert} variant="destructive" size="lg" className="w-full">
+              Send Alert Now
+            </Button>
+            <Button onClick={handleImOk} variant="outline" size="lg" className="w-full">
               I&apos;m OK
             </Button>
           </AlertDialogFooter>
