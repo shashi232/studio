@@ -61,7 +61,7 @@ const sendSms = ai.defineTool(
     name: 'sendSms',
     description: 'Sends an SMS message to a specified phone number.',
     inputSchema: z.object({
-      to: z.string().describe('The destination phone number for the SMS.'),
+      to: z.string().describe('The destination phone number for the SMS in E.164 format.'),
       body: z.string().describe('The content of the SMS message.'),
     }),
     outputSchema: z.object({
@@ -86,10 +86,10 @@ const sendSms = ai.defineTool(
         from: twilioPhoneNumber,
         to: input.to,
       });
-      console.log(`SMS sent to ${input.to} with SID: ${message.sid}`);
+      console.log(`SMS sent successfully to ${input.to}. SID: ${message.sid}`);
       return {success: true, messageSid: message.sid};
-    } catch (error) {
-      console.error(`Failed to send SMS to ${input.to}:`, error);
+    } catch (error: any) {
+      console.error(`Failed to send SMS to ${input.to}:`, error.message);
       return {success: false};
     }
   }
@@ -97,7 +97,7 @@ const sendSms = ai.defineTool(
 
 // Define a new input schema for the prompt that includes the stringified contacts
 const PromptInputSchema = DetectFallAndAlertInputSchema.extend({
-    stringifiedEmergencyContacts: z.string().describe('The stringified list of emergency contacts.'),
+    stringifiedEmergencyContacts: z.string().describe('A JSON string of the emergency contacts list.'),
 });
 
 // Define the main prompt for the AI
@@ -106,32 +106,30 @@ const prompt = ai.definePrompt({
   input: {schema: PromptInputSchema},
   output: {schema: DetectFallAndAlertOutputSchema},
   tools: [sendSms],
-  prompt: `You are an AI assistant that helps detect falls and send alerts.
+  prompt: `You are an AI assistant designed to detect falls and send emergency alerts.
 
-You will receive accelerometer data, GPS location, and a list of emergency contacts.
-Your task is to analyze the accelerometer data to determine if a fall has occurred.
-Consider a fall to be detected if there is a sudden change in acceleration followed by a period of no movement.
+Analyze the accelerometer data to determine if a fall has occurred. A fall is characterized by a sharp change in acceleration followed by a period of inactivity.
 
 - If a fall is detected:
   - Set 'fallDetected' to true.
-  - Set 'confirmationNeeded' to true. The app will then ask the user for confirmation.
+  - Set 'confirmationNeeded' to true.
   - If 'sendSms' is true:
-    - Construct a clear SOS message containing the user's GPS location: {{{gpsLocation}}}.
-    - Use the 'sendSms' tool to send this message to EACH emergency contact in the list: {{{stringifiedEmergencyContacts}}}.
-    - After using the tool, set the 'alertSent' flag to true.
-  - If 'sendSms' is false, just set 'fallDetected' and 'confirmationNeeded' to true.
+    - Construct a clear and urgent SOS message. The message MUST start with "SmartStep Alert: A fall has been detected for the user." and include their location based on this GPS data: {{{gpsLocation}}}.
+    - For EACH contact in the provided list, you MUST use the 'sendSms' tool to send the generated SOS message to their phone number.
+    - Here is the list of contacts: {{{stringifiedEmergencyContacts}}}.
+    - After successfully calling the tool for all contacts, set 'alertSent' to true.
+  - If 'sendSms' is false, do not send any messages.
 
 - If no fall is detected:
   - Set 'fallDetected' to false.
   - Set 'confirmationNeeded' to false.
   - Set 'alertSent' to false.
 
-Here is the data:
-Accelerometer: {{{accelerometerData}}}
-GPS Location: {{{gpsLocation}}}
-Emergency Contacts: {{{stringifiedEmergencyContacts}}}
+Data provided:
+- Accelerometer: {{{accelerometerData}}}
+- GPS Location: {{{gpsLocation}}}
 
-Output in the required JSON format.
+Produce the output in the required JSON format.
 `,
 });
 
