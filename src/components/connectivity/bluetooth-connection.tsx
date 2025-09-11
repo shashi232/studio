@@ -79,8 +79,8 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [SPP_SERVICE_UUID] }],
-        optionalServices: [SPP_SERVICE_UUID],
+        acceptAllDevices: true, // Show all devices
+        optionalServices: [SPP_SERVICE_UUID], // We will try to connect to this service later
       });
 
       setDevice(bleDevice);
@@ -221,7 +221,7 @@ export default function BluetoothConnection() {
             ) : (
                 <BluetoothSearching className="mr-2 h-5 w-5" />
             )}
-            {isScanning ? 'Scanning...' : 'Scan for ESP32'}
+            {isScanning ? 'Scanning...' : 'Scan for Devices'}
             </Button>
         )}
 
