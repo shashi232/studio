@@ -78,8 +78,8 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SPP_SERVICE_UUID], 
+        filters: [{ services: [SPP_SERVICE_UUID] }],
+        optionalServices: [SPP_SERVICE_UUID], // Still required to access the service after connection
       });
 
       setDevice(bleDevice);
@@ -92,7 +92,7 @@ export default function BluetoothConnection() {
       console.error('Bluetooth scan error:', error);
       let description = 'Could not find any devices. Please try again.';
       if (error.name === 'NotFoundError') {
-        description = 'No devices found. Make sure your ESP32 is nearby and in pairing mode.';
+        description = 'No devices found. Make sure your SmartStep device is nearby, turned on, and in pairing mode.';
       } else if (error.name === 'NotAllowedError') {
         description = 'Bluetooth access was denied. Please allow permissions and try again.';
       }
