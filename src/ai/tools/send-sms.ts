@@ -23,9 +23,10 @@ export const sendSms = ai.defineTool(
         const authToken = process.env.TWILIO_AUTH_TOKEN;
         const fromSmsNumber = process.env.TWILIO_PHONE_NUMBER;
         const fromWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+        const contentSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID;
         
-        if (!accountSid || !authToken || !fromSmsNumber) {
-            const errorMsg = "Twilio client for SMS is not initialized. Missing environment variables (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER).";
+        if (!accountSid || !authToken) {
+            const errorMsg = "Twilio client is not initialized. Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN.";
             console.error(errorMsg);
             return { success: false, error: errorMsg };
         }
@@ -37,42 +38,53 @@ export const sendSms = ai.defineTool(
         let whatsappError: string | undefined;
 
         // Send SMS
-        try {
-            const message = await client.messages.create({
-                body: input.body,
-                from: fromSmsNumber,
-                to: input.to,
-            });
-            console.log(`SMS sent successfully to ${input.to}. SID: ${message.sid}`);
-            smsSuccess = true;
-        } catch (error: any) {
-            console.error(`Failed to send SMS to ${input.to}:`, error);
-            smsError = error.message;
+        if (fromSmsNumber) {
+            try {
+                const message = await client.messages.create({
+                    body: input.body,
+                    from: fromSmsNumber,
+                    to: input.to,
+                });
+                console.log(`SMS sent successfully to ${input.to}. SID: ${message.sid}`);
+                smsSuccess = true;
+            } catch (error: any) {
+                console.error(`Failed to send SMS to ${input.to}:`, error);
+                smsError = error.message;
+            }
+        } else {
+            console.log("TWILIO_PHONE_NUMBER not configured. Skipping SMS message.");
+            smsSuccess = true; // Not an error if not configured
         }
 
         // Send WhatsApp message if configured
-        if (fromWhatsAppNumber) {
+        if (fromWhatsAppNumber && contentSid) {
             try {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
                 const whatsappMessage = await client.messages.create({
-                    body: input.body,
-                    from: fromWhatsAppNumber, // e.g., 'whatsapp:+14155238886'
+                    from: fromWhatsAppNumber,
                     to: `whatsapp:${input.to}`,
+                    contentSid: contentSid,
+                    contentVariables: JSON.stringify({
+                        '1': "Fall Detected",
+                        '2': timeString,
+                    }),
                 });
-                console.log(`WhatsApp message sent successfully to ${input.to}. SID: ${whatsappMessage.sid}`);
+                console.log(`WhatsApp template message sent successfully to ${input.to}. SID: ${whatsappMessage.sid}`);
                 whatsappSuccess = true;
             } catch (error: any) {
                 console.error(`Failed to send WhatsApp message to ${input.to}:`, error);
                 whatsappError = error.message;
             }
         } else {
-            console.log("TWILIO_WHATSAPP_NUMBER not configured. Skipping WhatsApp message.");
-            // If we don't intend to send a WhatsApp message, we can consider it a "success" for the overall operation.
-            whatsappSuccess = true; 
+            console.log("TWILIO_WHATSAPP_NUMBER or TWILIO_WHATSAPP_TEMPLATE_SID not configured. Skipping WhatsApp message.");
+            whatsappSuccess = true; // Not an error if not configured
         }
 
         const overallSuccess = smsSuccess && whatsappSuccess;
         let combinedMessage = "";
-        if (smsSuccess) combinedMessage += "SMS sent. ";
+        if (smsSuccess && fromSmsNumber) combinedMessage += "SMS sent. ";
         if (whatsappSuccess && fromWhatsAppNumber) combinedMessage += "WhatsApp message sent.";
 
         let combinedError = "";
