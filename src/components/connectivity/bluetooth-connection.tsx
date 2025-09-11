@@ -78,7 +78,7 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'DRISHTI_Stick' }],
+        acceptAllDevices: true,
         optionalServices: [SERVICE_UUID],
       });
 
