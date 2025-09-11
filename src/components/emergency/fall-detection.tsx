@@ -31,20 +31,6 @@ export default function FallDetection() {
   const { toast } = useToast();
   const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
   
-  useEffect(() => {
-    if (typeof window !== 'undefined' && "Notification" in window) {
-      if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-        Notification.requestPermission();
-      }
-    }
-  }, []);
-
-  const showLocalNotification = (title: string, body: string) => {
-    if (typeof window !== 'undefined' && "Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body });
-    }
-  };
-  
   const handleSendAlerts = async () => {
     if (isSendingAlert) return;
 
@@ -71,7 +57,6 @@ export default function FallDetection() {
           const successTitle = "SOS Alert Sent";
           const successDesc = "Emergency contacts have been notified.";
           toast({ title: successTitle, description: successDesc });
-          showLocalNotification(successTitle, successDesc);
       } else {
           const errorDesc = result.results.find(r => r.error)?.error || "Could not send alerts. Please check configuration and network.";
           toast({ title: "SOS Alert Failed", description: errorDesc, variant: "destructive"});
