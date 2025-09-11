@@ -2,22 +2,24 @@
 'use server';
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import Twilio from 'twilio';
 
 // Ensure environment variables are loaded
-if (!process.env.ZIXFLOW_API_KEY || !process.env.ZIXFLOW_WID || !process.env.ZIXFLOW_PHONE_NUMBER) {
-    console.warn("Zixflow environment variables are not fully set. SMS sending will fail.");
+if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
+    console.warn("Twilio environment variables are not fully set. SMS sending will fail.");
 }
 
-const zixflowApiKey = process.env.ZIXFLOW_API_KEY;
-const zixflowWid = process.env.ZIXFLOW_WID;
-const zixflowFromNumber = process.env.ZIXFLOW_PHONE_NUMBER;
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-const isConfigured = zixflowApiKey && zixflowWid && zixflowFromNumber;
+const isConfigured = accountSid && authToken && fromNumber;
+const client = isConfigured ? Twilio(accountSid, authToken) : null;
 
 export const sendSms = ai.defineTool(
     {
         name: 'sendSms',
-        description: 'Sends an SMS message to a specified phone number using Zixflow.',
+        description: 'Sends an SMS message to a specified phone number using Twilio.',
         inputSchema: z.object({
             to: z.string().describe('The E.164 format phone number to send the SMS to.'),
             body: z.string().describe('The content of the SMS message.'),
@@ -29,40 +31,20 @@ export const sendSms = ai.defineTool(
         }),
     },
     async (input) => {
-        if (!isConfigured) {
-            const errorMsg = "Zixflow client is not initialized. Missing environment variables.";
+        if (!client) {
+            const errorMsg = "Twilio client is not initialized. Missing environment variables.";
             console.error(errorMsg);
             return { success: false, error: errorMsg };
         }
-        
-        const fetch = (await import('node-fetch')).default;
 
         try {
-            const response = await fetch('https://api.zixflow.com/v1/sms/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${zixflowApiKey}`,
-                },
-                body: JSON.stringify({
-                    wid: zixflowWid,
-                    from: zixflowFromNumber,
-                    to: input.to,
-                    text: input.body,
-                })
+            const message = await client.messages.create({
+                body: input.body,
+                from: fromNumber,
+                to: input.to,
             });
-
-            const responseData: any = await response.json();
-
-            if (response.ok && responseData.status === 'success') {
-                const messageId = responseData.data.id;
-                console.log(`SMS sent successfully via Zixflow to ${input.to}. Message ID: ${messageId}`);
-                return { success: true, message: `Message sent with ID: ${messageId}` };
-            } else {
-                const errorMessage = responseData.message || 'Unknown error from Zixflow API';
-                console.error(`Failed to send SMS to ${input.to}:`, errorMessage);
-                return { success: false, error: errorMessage };
-            }
+            console.log(`SMS sent successfully to ${input.to}. SID: ${message.sid}`);
+            return { success: true, message: `Message sent with SID: ${message.sid}` };
         } catch (error: any) {
             console.error(`Failed to send SMS to ${input.to}:`, error);
             return { success: false, error: error.message };
