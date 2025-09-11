@@ -4,18 +4,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import Twilio from 'twilio';
 
-// Ensure environment variables are loaded
-if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
-    console.warn("Twilio environment variables are not fully set. SMS sending will fail.");
-}
-
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-
-const isConfigured = accountSid && authToken && fromNumber;
-const client = isConfigured ? Twilio(accountSid, authToken) : null;
-
 export const sendSms = ai.defineTool(
     {
         name: 'sendSms',
@@ -31,11 +19,17 @@ export const sendSms = ai.defineTool(
         }),
     },
     async (input) => {
-        if (!client) {
-            const errorMsg = "Twilio client is not initialized. Missing environment variables.";
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+        
+        if (!accountSid || !authToken || !fromNumber) {
+            const errorMsg = "Twilio client is not initialized. Missing environment variables (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER).";
             console.error(errorMsg);
             return { success: false, error: errorMsg };
         }
+        
+        const client = Twilio(accountSid, authToken);
 
         try {
             const message = await client.messages.create({
