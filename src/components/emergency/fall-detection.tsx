@@ -24,7 +24,7 @@ import { AppContext } from '@/context/app-context';
 const COUNTDOWN_SECONDS = 15;
 
 export default function FallDetection() {
-  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useLocalStorage('fall-monitoring', false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
   const [contacts] = useLocalStorage<EmergencyContact[]>('sos-contacts', []);
@@ -81,6 +81,13 @@ export default function FallDetection() {
     }
     return () => clearTimeout(timer);
   }, [isFallDetected, countdown]);
+
+  // Reset countdown when dialog closes
+  useEffect(() => {
+    if (!isFallDetected) {
+      setCountdown(COUNTDOWN_SECONDS);
+    }
+  }, [isFallDetected]);
 
 
   const handleSimulateFall = () => {
