@@ -129,8 +129,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: !autoConnecting,
-        filters: autoConnecting && lastDevice ? [{ name: lastDevice.name as string}] : undefined,
+        acceptAllDevices: true,
         optionalServices: [SERVICE_UUID],
       });
 
@@ -224,8 +223,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Effect for auto-connecting
   useEffect(() => {
     const autoConnectOnLoad = async () => {
-        if (autoConnect && lastDevice && !isConnected && !device) {
-            await handleScan(true);
+        if (autoConnect && lastDevice && !isConnected && !device && navigator.bluetooth) {
+            const permittedDevices = await navigator.bluetooth.getDevices();
+            const lastUsedDevice = permittedDevices.find(d => d.name === lastDevice.name);
+
+            if (lastUsedDevice) {
+                toast({ title: 'Auto-connecting...', description: `Found saved device: ${lastUsedDevice.name}`});
+                setDevice(lastUsedDevice);
+            }
         }
     }
     autoConnectOnLoad();
@@ -233,10 +238,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Effect to connect automatically after auto-scan finds a device
   useEffect(() => {
-    if(device && isScanning === false && isConnected === false && isConnecting === false && autoConnect && lastDevice?.name === device.name) {
+    if(device && !isConnected && !isConnecting && autoConnect && lastDevice?.name === device.name) {
         handleConnect();
     }
-  }, [device, isScanning, autoConnect, lastDevice]);
+  }, [device, isConnected, isConnecting, autoConnect, lastDevice]);
 
   const contextValue = useMemo(() => ({
     isFallDetected,
