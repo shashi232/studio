@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useContext } from 'react';
@@ -79,7 +80,7 @@ export default function BluetoothConnection() {
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
         filters: [{ services: [SPP_SERVICE_UUID] }],
-        optionalServices: [SPP_SERVICE_UUID], // Still required to access the service after connection
+        optionalServices: [SPP_SERVICE_UUID],
       });
 
       setDevice(bleDevice);
@@ -90,18 +91,24 @@ export default function BluetoothConnection() {
 
     } catch (error: any) {
       console.error('Bluetooth scan error:', error);
-      let description = 'Could not find any devices. Please try again.';
-      if (error.name === 'NotFoundError') {
-        description = 'No devices found. Make sure your SmartStep device is nearby, turned on, and in pairing mode.';
-      } else if (error.name === 'NotAllowedError') {
-        description = 'Bluetooth access was denied. Please allow permissions and try again.';
-      }
       
-      toast({
-        title: 'Scan Failed',
-        description,
-        variant: 'destructive',
-      });
+      // Don't show an error toast if the user simply cancelled the device chooser.
+      if (error.name === 'NotFoundError' && error.message.includes('cancelled')) {
+        // User cancelled the device picker. Silently stop.
+      } else {
+        let description = 'Could not find any devices. Please try again.';
+        if (error.name === 'NotFoundError') {
+          description = 'No devices found. Make sure your SmartStep device is nearby, turned on, and in pairing mode.';
+        } else if (error.name === 'NotAllowedError') {
+          description = 'Bluetooth access was denied. Please allow permissions and try again.';
+        }
+        
+        toast({
+          title: 'Scan Failed',
+          description,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsScanning(false);
     }
