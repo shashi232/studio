@@ -38,26 +38,19 @@ export type DetectFallOutput = z.infer<
   typeof DetectFallOutputSchema
 >;
 
-// Define the main prompt for the AI
+// Define the main prompt for the AI - This prompt's ONLY job is to confirm a fall.
 const detectFallPrompt = ai.definePrompt({
   name: 'detectFallPrompt',
-  input: {schema: z.object({ fallOccurred: z.boolean(), contacts: DetectFallInputSchema.shape.contacts })},
+  input: {schema: z.object({ fallOccurred: z.boolean() })},
   output: {schema: z.object({ fallDetected: z.boolean() }) },
-  tools: [sendSms],
-  prompt: `You are an AI assistant designed to alert emergency contacts when a fall is detected.
+  prompt: `You are an AI assistant that confirms if a fall has occurred.
+You have been given a boolean 'fallOccurred'.
+If 'fallOccurred' is true, set the 'fallDetected' output field to true.
+If 'fallOccurred' is false, set 'fallDetected' to false.
 
-You have been given a boolean 'fallOccurred' which is definitively TRUE if a fall happened.
-
-If 'fallOccurred' is true, you MUST use the sendSms tool to send the following alert message to EVERY emergency contact listed: "SmartStep Alert: A potential fall has been detected. Please check on the user immediately."
-
-Set the 'fallDetected' output field to true.
-
-If 'fallOccurred' is false, do nothing and set 'fallDetected' to false.
-
-- Emergency Contacts: {{{JSON.stringify contacts}}}
 - Fall Occurred: {{{fallOccurred}}}
 
-Produce the output in the required JSON format. Then, if a fall was detected, call the necessary tools.
+Produce the output in the required JSON format.
 `,
 });
 
@@ -69,38 +62,50 @@ const detectFallAndAlertFlow = ai.defineFlow(
     outputSchema: DetectFallOutputSchema,
   },
   async (input) => {
-    // If no fall occurred or we are not supposed to send an SMS, exit early.
-    if (!input.fallOccurred || !input.sendSms) {
-        return { fallDetected: input.fallOccurred, smsSent: false };
+    // If no fall occurred, exit early.
+    if (!input.fallOccurred) {
+        return { fallDetected: false, smsSent: false };
     }
 
     try {
+      // Step 1: Have the AI simply confirm the fall occurred.
       const { output } = await detectFallPrompt({
         fallOccurred: input.fallOccurred,
-        contacts: input.contacts,
       });
 
-      if (!output) {
+      if (!output?.fallDetected) {
         return { fallDetected: false, smsSent: false };
       }
+
+      // Step 2: If we are not supposed to send an SMS, exit here.
+      if (!input.sendSms) {
+          return { fallDetected: true, smsSent: false };
+      }
+
+      // Step 3: Application code takes control. Loop through contacts and send SMS.
+      const alertMessage = "SmartStep Alert: A potential fall has been detected. Please check on the user immediately.";
+      let smsSentSuccessfully = false;
       
-      const smsResults = await Promise.all(
-        output.toolCalls.map(async (toolCall) => {
-          if (toolCall.tool === 'sendSms') {
-              const result = await sendSms(toolCall.input);
-              return result.success;
-          }
-          return false;
+      const smsPromises = input.contacts.map(contact => 
+        sendSms({
+          to: contact.phone,
+          body: alertMessage,
         })
       );
 
-      const smsSentSuccessfully = smsResults.some(success => success);
+      const results = await Promise.all(smsPromises);
 
-      return { fallDetected: output.fallDetected, smsSent: smsSentSuccessfully };
+      // Check if at least one SMS was sent successfully.
+      smsSentSuccessfully = results.some(result => result.success);
+
+      if (!smsSentSuccessfully) {
+        console.error("Failed to send SMS to any contact.");
+      }
+
+      return { fallDetected: true, smsSent: smsSentSuccessfully };
 
     } catch (error) {
-        console.error("AI Fall Detection/Alert Error:", error);
-        // If the AI service fails, we assume no fall and no SMS sent for safety.
+        console.error("AI Fall Detection/Alert Flow Error:", error);
         return { fallDetected: false, smsSent: false };
     }
   }
