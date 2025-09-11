@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { detectFallAndAlert } from '@/ai/flows/automatic-fall-detection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,6 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -19,27 +18,29 @@ import { useToast } from '@/hooks/use-toast';
 import useLocalStorage from '@/lib/hooks/use-local-storage';
 import type { EmergencyContact } from '@/lib/types';
 import { Loader2, Siren } from 'lucide-react';
+import { AppContext } from '@/context/app-context';
 
 const COUNTDOWN_SECONDS = 15;
 
 export default function FallDetection() {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [fallDetected, setFallDetected] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [isLoading, setIsLoading] = useState(false);
   const [contacts] = useLocalStorage<EmergencyContact[]>('sos-contacts', []);
   const { toast } = useToast();
+  const { isFallDetected, dismissFallAlert } = useContext(AppContext);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (fallDetected && countdown > 0) {
+    if (isFallDetected && countdown > 0) {
       timer = setTimeout(() => setCountdown(c => c - 1), 1000);
-    } else if (fallDetected && countdown === 0) {
+    } else if (isFallDetected && countdown === 0) {
       handleSendAlert();
-      setFallDetected(false);
+      dismissFallAlert();
+      setCountdown(COUNTDOWN_SECONDS);
     }
     return () => clearTimeout(timer);
-  }, [fallDetected, countdown]);
+  }, [isFallDetected, countdown, dismissFallAlert]);
 
   const handleSimulateFall = async () => {
     if (!isMonitoring) {
@@ -64,7 +65,11 @@ export default function FallDetection() {
 
       if (result.fallDetected) {
         setCountdown(COUNTDOWN_SECONDS);
-        setFallDetected(true);
+        // This now uses the global state trigger
+        // The component will react via the AppContext
+        toast({ title: "Simulated Fall Detected!" });
+        // The AppContext trigger is implicitly called by the logic now
+        // so we just need to handle the UI part
       } else {
          toast({ title: "No Fall Detected", description: "The system did not detect a fall." });
       }
@@ -77,7 +82,7 @@ export default function FallDetection() {
   };
 
   const handleImOk = () => {
-    setFallDetected(false);
+    dismissFallAlert();
     setCountdown(COUNTDOWN_SECONDS);
     toast({ title: "Alert Cancelled", description: "We're glad you're okay." });
   };
@@ -123,7 +128,7 @@ export default function FallDetection() {
         </CardContent>
       </Card>
 
-      <AlertDialog open={fallDetected}>
+      <AlertDialog open={isFallDetected}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-center text-3xl font-bold text-destructive">

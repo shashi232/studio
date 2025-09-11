@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import Header from '@/components/layout/header';
 import BottomNav from '@/components/layout/bottom-nav';
+import { AppProvider } from '@/context/app-context';
 
 export const metadata: Metadata = {
   title: 'SmartStep Companion',
@@ -24,14 +25,16 @@ export default function RootLayout({
         <meta name="theme-color" content="#4B0082" />
       </head>
       <body className="font-body antialiased">
-        <div className="relative flex min-h-screen w-full flex-col">
-            <Header />
-            <main className="flex-1 px-4 pt-4 pb-24 md:px-6">
-              {children}
-            </main>
-            <BottomNav />
-        </div>
-        <Toaster />
+        <AppProvider>
+          <div className="relative flex min-h-screen w-full flex-col">
+              <Header />
+              <main className="flex-1 px-4 pt-4 pb-24 md:px-6">
+                {children}
+              </main>
+              <BottomNav />
+          </div>
+          <Toaster />
+        </AppProvider>
       </body>
     </html>
   );

@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
+import { AppContext } from '@/context/app-context';
 
 // Standard Bluetooth Service UUID for Serial Port Profile (SPP)
 const SPP_SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb';
+// Standard Characteristic for SPP for receiving data (RX) from the ESP32
+const SPP_CHARACTERISTIC_UUID = '00001101-0000-1000-8000-00805f9b34fb'; // Often same as service
+
 
 export default function BluetoothConnection() {
   const [isScanning, setIsScanning] = useState(false);
@@ -16,6 +20,50 @@ export default function BluetoothConnection() {
   const [isConnected, setIsConnected] = useState(false);
   const [device, setDevice] = useState<BluetoothDevice | null>(null);
   const { toast } = useToast();
+  const { triggerFallAlert } = useContext(AppContext);
+
+  const handleNotifications = useCallback((event: Event) => {
+    const target = event.target as BluetoothRemoteGATTCharacteristic;
+    const value = target.value;
+    if (value) {
+      const decoder = new TextDecoder('utf-8');
+      const message = decoder.decode(value);
+      console.log('Received from ESP32:', message);
+      
+      // Check for a specific message from the ESP32 to trigger the alert
+      if (message.includes('FALL')) {
+        toast({
+          title: 'Fall Detected by Device!',
+          description: 'SmartStep device triggered a fall alert.',
+          variant: 'destructive',
+        });
+        triggerFallAlert();
+      }
+    }
+  }, [toast, triggerFallAlert]);
+  
+  const setupNotifications = async (server: BluetoothRemoteGATTServer) => {
+    try {
+        const service = await server.getPrimaryService(SPP_SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(SPP_CHARACTERISTIC_UUID);
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+        
+        toast({
+            title: 'Notifications Enabled',
+            description: 'Listening for messages from your SmartStep device.',
+        });
+    } catch(error) {
+        console.error('Notification setup error:', error);
+        toast({
+            title: 'Listener Failed',
+            description: 'Could not set up a listener for device messages.',
+            variant: 'destructive',
+        });
+    }
+  }
+
 
   const handleScan = async () => {
     if (typeof navigator === 'undefined' || !navigator.bluetooth) {
@@ -30,11 +78,8 @@ export default function BluetoothConnection() {
     setIsScanning(true);
     try {
       const bleDevice = await navigator.bluetooth.requestDevice({
-        // We accept all devices and then filter by services, which is a common
-        // pattern for connecting to devices like ESP32 that might not advertise
-        // services in a way that `filters` can pick up directly.
         acceptAllDevices: true,
-        optionalServices: [SPP_SERVICE_UUID, 'battery_service', 'device_information'], // Add SPP and other common services
+        optionalServices: [SPP_SERVICE_UUID], 
       });
 
       setDevice(bleDevice);
@@ -77,13 +122,16 @@ export default function BluetoothConnection() {
     setIsConnecting(true);
     try {
         const server = await device.gatt?.connect();
-        // You could add logic here to discover services and characteristics
-        // For now, we'll just confirm the connection.
-        setIsConnected(true);
-        toast({
-            title: 'Connected!',
-            description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
-        });
+        if (server) {
+            setIsConnected(true);
+            toast({
+                title: 'Connected!',
+                description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
+            });
+            await setupNotifications(server);
+        } else {
+            throw new Error("Could not get GATT server.");
+        }
     } catch(error) {
         console.error('Bluetooth connect error:', error);
         toast({
@@ -100,7 +148,6 @@ export default function BluetoothConnection() {
   const handleDisconnect = () => {
     if (device?.gatt?.connected) {
       device.gatt.disconnect();
-      // State change will be handled by the 'gattserverdisconnected' event listener
     }
   };
 
@@ -117,6 +164,7 @@ export default function BluetoothConnection() {
 
     return () => {
         if (device) {
+            // Clean up characteristic listener if it exists
             device.removeEventListener('gattserverdisconnected', onDisconnected);
         }
     };
