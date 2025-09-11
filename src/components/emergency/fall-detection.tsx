@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useContext } from 'react';
@@ -26,6 +27,7 @@ export default function FallDetection() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingAlert, setIsSendingAlert] = useState(false); // New state to prevent double sends
   const [contacts] = useLocalStorage<EmergencyContact[]>('sos-contacts', []);
   const { toast } = useToast();
   const { isFallDetected, triggerFallAlert, dismissFallAlert } = useContext(AppContext);
@@ -59,6 +61,10 @@ export default function FallDetection() {
     }
     
     setIsLoading(true);
+    if (sendSms) {
+      setIsSendingAlert(true);
+    }
+
     try {
       // These are mock values for demonstration. In a real app, you'd get these from device sensors.
       const mockAccelerometerData = JSON.stringify({ x: 2.5, y: 1.2, z: 9.8, freefall: true });
@@ -82,6 +88,8 @@ export default function FallDetection() {
         });
       } else if (!result.fallDetected) {
          toast({ title: "No Fall Detected", description: "The system did not detect a fall." });
+      } else if (sendSms && !result.alertSent) {
+        toast({ title: "SMS Failed", description: "The alert could not be sent. Please check your settings.", variant: "destructive" });
       }
 
     } catch (error) {
@@ -90,9 +98,10 @@ export default function FallDetection() {
     } finally {
         setIsLoading(false);
         // Reset state after alert is sent or cancelled
-        if (sendSms) {
+        if (sendSms || !isFallDetected) {
           dismissFallAlert();
           setCountdown(COUNTDOWN_SECONDS);
+          setIsSendingAlert(false);
         }
     }
   }
@@ -104,10 +113,12 @@ export default function FallDetection() {
   const handleImOk = () => {
     dismissFallAlert();
     setCountdown(COUNTDOWN_SECONDS);
+    setIsSendingAlert(false);
     toast({ title: "Alert Cancelled", description: "We're glad you're okay." });
   };
 
   const handleSendAlert = () => {
+    if (isSendingAlert) return; // Prevent multiple calls
     // Now we call the flow again, but instruct it to send the SMS
     runFallDetection(true); 
   };
@@ -135,7 +146,7 @@ export default function FallDetection() {
             />
           </div>
           <Button onClick={handleSimulateFall} disabled={isLoading || !isMonitoring} className="w-full" size="lg">
-            {isLoading && countdown > 0 ? (
+            {(isLoading && !isSendingAlert) ? (
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : (
                 <Siren className="mr-2 h-5 w-5" />
@@ -159,10 +170,11 @@ export default function FallDetection() {
             <div className="text-6xl font-bold tabular-nums text-destructive">{countdown}</div>
           </div>
           <AlertDialogFooter className="flex-col gap-2">
-            <Button onClick={handleSendAlert} variant="destructive" size="lg" className="w-full">
-              Send Alert Now
+            <Button onClick={handleSendAlert} variant="destructive" size="lg" className="w-full" disabled={isSendingAlert}>
+              {isSendingAlert ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              {isSendingAlert ? "Sending..." : "Send Alert Now"}
             </Button>
-            <Button onClick={handleImOk} variant="outline" size="lg" className="w-full">
+            <Button onClick={handleImOk} variant="outline" size="lg" className="w-full" disabled={isSendingAlert}>
               I&apos;m OK
             </Button>
           </AlertDialogFooter>
