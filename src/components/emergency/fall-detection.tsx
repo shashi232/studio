@@ -73,7 +73,8 @@ export default function FallDetection() {
           toast({ title: successTitle, description: successDesc });
           showLocalNotification(successTitle, successDesc);
       } else {
-          toast({ title: "SOS Alert Failed", description: "Could not send alerts. Please check configuration and network.", variant: "destructive"});
+          const errorDesc = result.results.find(r => r.error)?.error || "Could not send alerts. Please check configuration and network.";
+          toast({ title: "SOS Alert Failed", description: errorDesc, variant: "destructive"});
       }
 
     } catch (error) {
