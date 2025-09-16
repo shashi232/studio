@@ -38,23 +38,23 @@ export default function BluetoothConnection() {
       </CardHeader>
       <CardContent className="space-y-6">
         
-        <div className="flex items-center justify-between rounded-lg border p-4">
-            <Label htmlFor="autoconnect-switch" className="flex-grow">
-              <h3 className="font-medium">Auto-connect</h3>
-              {isClient && (
+        {isClient && (
+          <div className="flex items-center justify-between rounded-lg border p-4">
+              <Label htmlFor="autoconnect-switch" className="flex-grow">
+                <h3 className="font-medium">Auto-connect</h3>
                 <p className="text-xs text-muted-foreground">
                   {lastDevice ? `Automatically connect to ${lastDevice.name}` : 'No previous device saved.'}
                 </p>
-              )}
-            </Label>
-            <Switch
-              id="autoconnect-switch"
-              checked={isClient ? autoConnect : false}
-              onCheckedChange={setAutoConnect}
-              disabled={isClient ? !lastDevice : true}
-              aria-label="Toggle autoconnect"
-            />
-          </div>
+              </Label>
+              <Switch
+                id="autoconnect-switch"
+                checked={autoConnect}
+                onCheckedChange={setAutoConnect}
+                disabled={!lastDevice}
+                aria-label="Toggle autoconnect"
+              />
+            </div>
+        )}
         
         {(isConnecting) && (
              <div className="flex items-center justify-center space-x-2 p-4">
