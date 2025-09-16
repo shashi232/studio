@@ -49,9 +49,9 @@ export default function BluetoothConnection() {
             </Label>
             <Switch
               id="autoconnect-switch"
-              checked={autoConnect}
+              checked={isClient ? autoConnect : false}
               onCheckedChange={setAutoConnect}
-              disabled={!lastDevice}
+              disabled={isClient ? !lastDevice : true}
               aria-label="Toggle autoconnect"
             />
           </div>
