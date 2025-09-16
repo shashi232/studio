@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useContext } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BluetoothSearching, Loader2 } from 'lucide-react';
@@ -22,6 +22,11 @@ export default function BluetoothConnection() {
     handleScan,
     handleDisconnect,
   } = useContext(AppContext);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const showScanButton = !isConnected && !isConnecting;
 
@@ -36,9 +41,11 @@ export default function BluetoothConnection() {
         <div className="flex items-center justify-between rounded-lg border p-4">
             <Label htmlFor="autoconnect-switch" className="flex-grow">
               <h3 className="font-medium">Auto-connect</h3>
-              <p className="text-xs text-muted-foreground">
-                {lastDevice ? `Automatically connect to ${lastDevice.name}` : 'No previous device saved.'}
-              </p>
+              {isClient && (
+                <p className="text-xs text-muted-foreground">
+                  {lastDevice ? `Automatically connect to ${lastDevice.name}` : 'No previous device saved.'}
+                </p>
+              )}
             </Label>
             <Switch
               id="autoconnect-switch"
