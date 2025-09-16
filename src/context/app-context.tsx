@@ -30,7 +30,7 @@ interface AppContextType {
 
   // Bluetooth Actions
   handleScan: () => Promise<void>;
-  handleConnect: () => Promise<void>;
+  handleConnect: (deviceToConnect: BluetoothDevice) => Promise<void>;
   handleDisconnect: () => void;
 }
 
@@ -112,58 +112,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  const handleScan = async (autoConnecting: boolean = false) => {
-    if (typeof navigator === 'undefined' || !navigator.bluetooth) {
-      toast({
-        title: 'Web Bluetooth Not Supported',
-        description: 'Your browser does not support the Web Bluetooth API.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsScanning(true);
-    if (autoConnecting) {
-        toast({ title: 'Auto-connecting...', description: `Scanning for ${lastDevice?.name}`});
-    }
-    
-    try {
-      const bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID],
-      });
-
-      setDevice(bleDevice);
-      if (!autoConnecting) {
-        toast({
-            title: 'Device Found!',
-            description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
-        });
-      }
-
-    } catch (error: any) {
-      if (error.name !== 'NotFoundError') {
-        const description = autoConnecting
-          ? 'Could not find the last connected device. It may be out of range or off.'
-          : 'Could not find any devices. Please try again.';
-        toast({
-          title: 'Scan Failed',
-          description,
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      setIsScanning(false);
-    }
-  };
-  
-  const handleConnect = async () => {
-    if (!device) {
+  const handleConnect = useCallback(async (deviceToConnect: BluetoothDevice) => {
+    if (!deviceToConnect) {
         toast({ title: 'No device selected', description: 'Please scan for a device first.', variant: 'destructive'});
         return;
     }
+    
+    // Set the device in context if it's not already set
+    if (device?.id !== deviceToConnect.id) {
+        setDevice(deviceToConnect);
+    }
 
-    if (device.gatt?.connected) {
+    if (deviceToConnect.gatt?.connected) {
         toast({ title: 'Already Connected'});
         setIsConnected(true);
         return;
@@ -171,14 +131,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     setIsConnecting(true);
     try {
-        const server = await device.gatt?.connect();
+        const server = await deviceToConnect.gatt?.connect();
         if (server) {
             setIsConnected(true);
             toast({
                 title: 'Connected!',
-                description: `Successfully connected to ${device.name || 'Unnamed Device'}`,
+                description: `Successfully connected to ${deviceToConnect.name || 'Unnamed Device'}`,
             });
-            setLastDevice({ id: device.id, name: device.name || null });
+            setLastDevice({ id: deviceToConnect.id, name: deviceToConnect.name || null });
             await setupNotifications(server);
         } else {
             throw new Error("Could not get GATT server.");
@@ -191,11 +151,51 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             variant: 'destructive',
         });
         setIsConnected(false);
+        setDevice(null);
     } finally {
         setIsConnecting(false);
     }
-  }
+  }, [device, setLastDevice, toast, setupNotifications, handleNotifications]);
 
+  const handleScan = async () => {
+    if (typeof navigator === 'undefined' || !navigator.bluetooth) {
+      toast({
+        title: 'Web Bluetooth Not Supported',
+        description: 'Your browser does not support the Web Bluetooth API.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    
+    try {
+      const bleDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID],
+      });
+
+      toast({
+          title: 'Device Found!',
+          description: `Found device: ${bleDevice.name || 'Unnamed Device'}`,
+      });
+      
+      await handleConnect(bleDevice);
+
+    } catch (error: any) {
+      if (error.name !== 'NotFoundError') {
+        const description = 'Could not find any devices. Please try again.';
+        toast({
+          title: 'Scan Failed',
+          description,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  };
+  
   const handleDisconnect = () => {
     if (device?.gatt?.connected) {
       device.gatt.disconnect();
@@ -223,25 +223,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Effect for auto-connecting
   useEffect(() => {
     const autoConnectOnLoad = async () => {
-        if (autoConnect && lastDevice && !isConnected && !device && navigator.bluetooth) {
+        if (autoConnect && lastDevice && !isConnected && !isConnecting && !device && typeof navigator.bluetooth?.getDevices === 'function') {
             const permittedDevices = await navigator.bluetooth.getDevices();
             const lastUsedDevice = permittedDevices.find(d => d.name === lastDevice.name);
 
             if (lastUsedDevice) {
                 toast({ title: 'Auto-connecting...', description: `Found saved device: ${lastUsedDevice.name}`});
-                setDevice(lastUsedDevice);
+                await handleConnect(lastUsedDevice);
             }
         }
     }
     autoConnectOnLoad();
-  }, [autoConnect, lastDevice]);
+  }, [autoConnect, lastDevice, isConnected, isConnecting, device, handleConnect, toast]);
 
-  // Effect to connect automatically after auto-scan finds a device
-  useEffect(() => {
-    if(device && !isConnected && !isConnecting && autoConnect && lastDevice?.name === device.name) {
-        handleConnect();
-    }
-  }, [device, isConnected, isConnecting, autoConnect, lastDevice]);
 
   const contextValue = useMemo(() => ({
     isFallDetected,
