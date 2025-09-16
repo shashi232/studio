@@ -4,7 +4,7 @@
 import { useContext } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BluetoothConnected, BluetoothSearching, Loader2 } from 'lucide-react';
+import { BluetoothSearching, Loader2 } from 'lucide-react';
 import { AppContext } from '@/context/app-context';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
@@ -60,8 +60,8 @@ export default function BluetoothConnection() {
              <Card className="border-green-500 bg-green-500/10">
                 <CardContent className="flex items-center justify-between p-4">
                     <div>
-                        <p className="font-semibold text-green-700">Connected to:</p>
-                        <p>{device.name || 'Unnamed Device'}</p>
+                        <p className="font-semibold text-green-700 dark:text-green-400">Connected to:</p>
+                        <p className="text-foreground">{device.name || 'Unnamed Device'}</p>
                     </div>
                     <Button variant="destructive" onClick={handleDisconnect}>
                         Disconnect
