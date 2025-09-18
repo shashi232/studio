@@ -15,7 +15,7 @@ export default function SettingsPage() {
     <div className="container mx-auto max-w-2xl space-y-8">
       <div className="text-center">
         <h1 className="font-headline text-3xl font-bold text-primary">Settings</h1>
-        <p className="text-muted-foreground">Customize your SmartStep experience.</p>
+        <p className="text-muted-foreground">Customize your DRISHTI experience.</p>
       </div>
 
       <Card>

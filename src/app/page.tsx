@@ -31,7 +31,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center space-y-8">
       <div className="text-center">
         <h1 className="font-headline text-4xl font-bold tracking-tight text-primary sm:text-5xl">
-          Welcome to SmartStep
+          Welcome to DRISHTI
         </h1>
         <p className="mt-4 text-lg text-muted-foreground">
           Your companion for safer journeys.

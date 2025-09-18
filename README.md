@@ -1,4 +1,4 @@
-# DRISHTI_Smart-stick
+# DRISHTI
 
 # Firebase Studio
 

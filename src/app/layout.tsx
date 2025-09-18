@@ -6,8 +6,8 @@ import BottomNav from '@/components/layout/bottom-nav';
 import { AppProvider } from '@/context/app-context';
 
 export const metadata: Metadata = {
-  title: 'SmartStep Companion',
-  description: 'A companion app for your smart walking stick.',
+  title: 'DRISHTI',
+  description: 'Your smart stick companion app.',
   manifest: '/manifest.json',
 };
 

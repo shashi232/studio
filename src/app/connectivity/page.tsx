@@ -5,7 +5,7 @@ export default function ConnectivityPage() {
     <div className="container mx-auto max-w-2xl space-y-8">
       <div className="text-center">
         <h1 className="font-headline text-3xl font-bold text-primary">Connectivity</h1>
-        <p className="text-muted-foreground">Connect to your SmartStep device.</p>
+        <p className="text-muted-foreground">Connect to your DRISHTI device.</p>
       </div>
       
       <BluetoothConnection />

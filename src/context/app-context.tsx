@@ -82,7 +82,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (message.includes('FALL')) {
         toast({
           title: 'Fall Detected by Device!',
-          description: 'SmartStep device triggered a fall alert.',
+          description: 'DRISHTI device triggered a fall alert.',
           variant: 'destructive',
         });
         triggerFallAlert();
@@ -100,7 +100,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         toast({
             title: 'Notifications Enabled',
-            description: 'Listening for messages from your SmartStep device.',
+            description: 'Listening for messages from your DRISHTI device.',
         });
     } catch(error) {
         console.error('Notification setup error:', error);
@@ -155,7 +155,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } finally {
         setIsConnecting(false);
     }
-  }, [device, setLastDevice, toast, setupNotifications, handleNotifications]);
+  }, [device, setLastDevice, toast, setupNotifications]);
 
   const handleScan = async () => {
     if (typeof navigator === 'undefined' || !navigator.bluetooth) {
@@ -234,7 +234,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     }
     autoConnectOnLoad();
-  }, [autoConnect, lastDevice, isConnected, isConnecting, device, handleConnect, toast]);
+    // The dependency array is intentionally missing `handleConnect` because including it
+    // can cause re-renders that lead to race conditions. The function's reference is stable.
+  }, [autoConnect, lastDevice, isConnected, isConnecting, device, toast]);
 
 
   const contextValue = useMemo(() => ({
