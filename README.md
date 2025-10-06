@@ -8,7 +8,7 @@ An open-source, smart electronic travel aid to enhance the mobility and safety o
 Project DRISHTI acts as an intelligent guardian by integrating multiple sensors to provide real-time environmental awareness and an automated emergency alert system.
 The Problem
 
-Traditional aids for the visually impaired have key limitations: they cannot detect head-level obstacles or ground-level hazards like puddles. Furthermore, summoning help quickly after a fall is a critical challenge. Commercial smart canes that solve these issues are often economically inaccessible, costing anywhere from ₹15,000 to over ₹50,000.
+Traditional aids for the visually impaired have key limitations: they cannot detect head-level obstacles or ground-level hazards like puddles. Furthermore, summoning help quickly after a fall is a critical challenge. Commercial smart canes that solve these issues are often economically inaccessible, costing anywhere from ₹1500 to over ₹2000.
 Our Solution
 
 By leveraging an ESP32 microcontroller and common off-the-shelf components, DRISHTI offers a powerful, low-cost, and reliable open-source safety device that anyone can build.
